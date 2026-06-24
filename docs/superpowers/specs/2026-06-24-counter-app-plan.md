@@ -28,7 +28,7 @@
 - [ ] **步骤 1：创建 Android Studio 项目**
   - 包名：`com.snuabar.counter`
   - 最低 SDK：API 29 (Android 10)
-  - 目标 SDK：API 34
+  - 目标 SDK：API 36
   - 语言：Kotlin
   - 构建系统：Gradle with Kotlin DSL
 
@@ -57,12 +57,12 @@ plugins {
 
 android {
     namespace = "com.snuabar.counter"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.snuabar.counter"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
     }
