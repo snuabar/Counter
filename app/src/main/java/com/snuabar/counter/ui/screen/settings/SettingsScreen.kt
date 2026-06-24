@@ -23,6 +23,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val currentUser by viewModel.currentUser.collectAsState()
+    val threshold by viewModel.threshold.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -71,6 +72,30 @@ fun SettingsScreen(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = null,
                         modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Threshold setting
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "匹配阈值",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "当前值: ${(threshold * 100).toInt()}%",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Slider(
+                        value = threshold,
+                        onValueChange = { viewModel.setThreshold(it) },
+                        valueRange = 0.1f..1.0f,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             }
