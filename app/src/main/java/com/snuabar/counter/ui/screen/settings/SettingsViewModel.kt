@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.snuabar.counter.data.local.prefs.ThemeMode
 import com.snuabar.counter.data.local.prefs.ThemePreferences
+import com.snuabar.counter.data.repository.BackupRepository
 import com.snuabar.counter.domain.model.User
 import com.snuabar.counter.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,7 +17,8 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val userRepository: UserRepository,
-    private val themePreferences: ThemePreferences
+    private val themePreferences: ThemePreferences,
+    private val backupRepository: BackupRepository
 ) : ViewModel() {
 
     private val _currentUser = MutableStateFlow<User?>(null)
@@ -52,6 +54,20 @@ class SettingsViewModel @Inject constructor(
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch {
             themePreferences.setThemeMode(mode)
+        }
+    }
+
+    fun exportData(): String {
+        var result = ""
+        viewModelScope.launch {
+            result = backupRepository.exportToJson()
+        }
+        return result
+    }
+
+    fun importData(jsonString: String) {
+        viewModelScope.launch {
+            backupRepository.importFromJson(jsonString)
         }
     }
 }
