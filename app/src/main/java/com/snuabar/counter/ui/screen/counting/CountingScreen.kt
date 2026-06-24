@@ -1,6 +1,8 @@
 package com.snuabar.counter.ui.screen.counting
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,6 +19,7 @@ fun CountingScreen(
     val currentCount by viewModel.currentCount.collectAsState()
     val isRunning by viewModel.isRunning.collectAsState()
     val confidence by viewModel.confidence.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
 
     Column(
         modifier = Modifier
@@ -25,8 +28,27 @@ fun CountingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Top section: Status and confidence
+        // Top section: User info, status and confidence
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            // User info
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Person,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.outline
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = currentUser?.let { "用户: ${it.name}" } ?: "未选择用户",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = if (isRunning) "计数中" else "暂停",
                 style = MaterialTheme.typography.titleMedium,

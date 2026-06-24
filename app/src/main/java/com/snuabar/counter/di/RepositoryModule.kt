@@ -2,8 +2,10 @@ package com.snuabar.counter.di
 
 import com.snuabar.counter.data.repository.CountingSessionRepositoryImpl
 import com.snuabar.counter.data.repository.TemplateRepositoryImpl
+import com.snuabar.counter.data.repository.UserRepositoryImpl
 import com.snuabar.counter.domain.repository.CountingSessionRepository
 import com.snuabar.counter.domain.repository.TemplateRepository
+import com.snuabar.counter.domain.repository.UserRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -22,4 +24,8 @@ abstract class RepositoryModule {
     abstract fun bindTemplateRepository(
         impl: TemplateRepositoryImpl
     ): TemplateRepository
+    @Binds
+    abstract fun bindUserRepository(
+        impl: UserRepositoryImpl
+    ): UserRepository
 }

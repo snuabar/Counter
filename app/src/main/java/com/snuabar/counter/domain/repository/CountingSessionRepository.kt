@@ -9,6 +9,7 @@ interface CountingSessionRepository {
     suspend fun updateSession(session: CountingSession)
     suspend fun getSession(id: Long): CountingSession?
     fun getAllSessions(): Flow<List<CountingSession>>
+    fun getSessionsByUserId(userId: Long): Flow<List<CountingSession>>
     suspend fun addCountEvent(event: CountEvent)
     fun getCountEvents(sessionId: Long): Flow<List<CountEvent>>
 }

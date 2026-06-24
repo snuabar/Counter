@@ -17,12 +17,14 @@ import com.snuabar.counter.ui.screen.counting.CountingScreen
 import com.snuabar.counter.ui.screen.history.HistoryScreen
 import com.snuabar.counter.ui.screen.settings.SettingsScreen
 import com.snuabar.counter.ui.screen.template.TemplateScreen
+import com.snuabar.counter.ui.screen.user.UserScreen
 
 sealed class Screen(val route: String, val title: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     object Counting : Screen("counting", "计数", Icons.Default.SportsHandball)
     object History : Screen("history", "历史", Icons.Default.History)
     object Template : Screen("template", "模板", Icons.Default.SportsHandball)
     object Settings : Screen("settings", "设置", Icons.Default.Settings)
+    object User : Screen("user", "用户", Icons.Default.Settings)
 }
 
 val bottomNavItems = listOf(Screen.Counting, Screen.History, Screen.Template, Screen.Settings)
@@ -65,6 +67,7 @@ fun NavigationGraph(
         composable(Screen.Counting.route) { CountingScreen() }
         composable(Screen.History.route) { HistoryScreen() }
         composable(Screen.Template.route) { TemplateScreen() }
-        composable(Screen.Settings.route) { SettingsScreen() }
+        composable(Screen.Settings.route) { SettingsScreen(navController) }
+        composable(Screen.User.route) { UserScreen() }
     }
 }

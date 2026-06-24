@@ -28,6 +28,12 @@ class TemplateRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun getTemplatesByUserId(userId: Long): Flow<List<Template>> {
+        return templateDao.getByUserId(userId).map { list ->
+            list.map { it.toDomain() }
+        }
+    }
+
     override suspend fun getBuiltinTemplates(): List<Template> {
         return templateDao.getAll().map { list ->
             list.filter { it.userId == null }.map { it.toDomain() }

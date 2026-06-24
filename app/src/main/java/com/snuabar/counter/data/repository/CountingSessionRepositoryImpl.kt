@@ -36,6 +36,12 @@ class CountingSessionRepositoryImpl @Inject constructor(
         }
     }
 
+    override fun getSessionsByUserId(userId: Long): Flow<List<CountingSession>> {
+        return sessionDao.getByUserId(userId).map { list ->
+            list.map { it.toDomain() }
+        }
+    }
+
     override suspend fun addCountEvent(event: CountEvent) {
         eventDao.insert(event.toEntity())
     }
