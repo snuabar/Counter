@@ -26,7 +26,7 @@
 - 创建：`settings.gradle.kts`
 
 - [ ] **步骤 1：创建 Android Studio 项目**
-  - 包名：`com.example.counter`
+  - 包名：`com.snuabar.counter`
   - 最低 SDK：API 24 (Android 7.0)
   - 目标 SDK：API 34
   - 语言：Kotlin
@@ -56,11 +56,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.counter"
+    namespace = "com.snuabar.counter"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.counter"
+        applicationId = "com.snuabar.counter"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -196,7 +196,7 @@ dependencies {
 **文件：** `app/src/main/java/com/example/counter/CounterApplication.kt`
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
@@ -210,14 +210,14 @@ class CounterApplication : Application()
 **文件：** `app/src/main/java/com/example/counter/MainActivity.kt`
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import com.example.counter.ui.theme.CounterTheme
+import com.snuabar.counter.ui.theme.CounterTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -302,7 +302,7 @@ git commit -m "chore: setup Clean Architecture directory structure"
 - [ ] **步骤 1：定义 User 模型**
 
 ```kotlin
-package com.example.counter.domain.model
+package com.snuabar.counter.domain.model
 
 data class User(
     val id: Long = 0,
@@ -315,7 +315,7 @@ data class User(
 - [ ] **步骤 2：定义 CountingSession 模型**
 
 ```kotlin
-package com.example.counter.domain.model
+package com.snuabar.counter.domain.model
 
 enum class SensorType { VISION, AUDIO }
 
@@ -338,7 +338,7 @@ data class CountingSession(
 - [ ] **步骤 3：定义 CountEvent 模型**
 
 ```kotlin
-package com.example.counter.domain.model
+package com.snuabar.counter.domain.model
 
 data class CountEvent(
     val id: Long = 0,
@@ -352,7 +352,7 @@ data class CountEvent(
 - [ ] **步骤 4：定义 Template 模型**
 
 ```kotlin
-package com.example.counter.domain.model
+package com.snuabar.counter.domain.model
 
 enum class TemplateType { BUILTIN, CUSTOM }
 
@@ -394,7 +394,7 @@ git commit -m "feat(domain): define core data models (User, Session, Event, Temp
 - [ ] **步骤 1-4：创建 Entity 类（示例 UserEntity）**
 
 ```kotlin
-package com.example.counter.data.local.db.entity
+package com.snuabar.counter.data.local.db.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
@@ -414,12 +414,12 @@ data class UserEntity(
 - [ ] **步骤 5-8：创建 DAO 接口（示例）**
 
 ```kotlin
-package com.example.counter.data.local.db.dao
+package com.snuabar.counter.data.local.db.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
-import com.example.counter.data.local.db.entity.UserEntity
+import com.snuabar.counter.data.local.db.entity.UserEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -438,12 +438,12 @@ interface UserDao {
 - [ ] **步骤 9：创建 Database 类**
 
 ```kotlin
-package com.example.counter.data.local.db
+package com.snuabar.counter.data.local.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
-import com.example.counter.data.local.db.dao.*
-import com.example.counter.data.local.db.entity.*
+import com.snuabar.counter.data.local.db.dao.*
+import com.snuabar.counter.data.local.db.entity.*
 
 @Database(
     entities = [
@@ -483,9 +483,9 @@ git commit -m "feat(data): setup Room database with entities and DAOs"
 - [ ] **步骤 1：定义 Repository 接口**
 
 ```kotlin
-package com.example.counter.domain.repository
+package com.snuabar.counter.domain.repository
 
-import com.example.counter.domain.model.*
+import com.snuabar.counter.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
 interface CountingSessionRepository {
@@ -508,12 +508,12 @@ interface TemplateRepository {
 - [ ] **步骤 2：实现 Repository**
 
 ```kotlin
-package com.example.counter.data.repository
+package com.snuabar.counter.data.repository
 
-import com.example.counter.data.local.db.dao.*
-import com.example.counter.data.local.db.entity.*
-import com.example.counter.domain.model.*
-import com.example.counter.domain.repository.*
+import com.snuabar.counter.data.local.db.dao.*
+import com.snuabar.counter.data.local.db.entity.*
+import com.snuabar.counter.domain.model.*
+import com.snuabar.counter.domain.repository.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -572,11 +572,11 @@ git commit -m "feat(data): implement repository layer with mappers"
 - [ ] **步骤 1：创建 DatabaseModule**
 
 ```kotlin
-package com.example.counter.di
+package com.snuabar.counter.di
 
 import android.content.Context
 import androidx.room.Room
-import com.example.counter.data.local.db.CounterDatabase
+import com.snuabar.counter.data.local.db.CounterDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -612,10 +612,10 @@ object DatabaseModule {
 - [ ] **步骤 2：创建 RepositoryModule**
 
 ```kotlin
-package com.example.counter.di
+package com.snuabar.counter.di
 
-import com.example.counter.data.repository.*
-import com.example.counter.domain.repository.*
+import com.snuabar.counter.data.repository.*
+import com.snuabar.counter.domain.repository.*
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -659,7 +659,7 @@ git commit -m "feat(di): setup Hilt modules for Database and Repository injectio
 - [ ] **步骤 1：定义检测引擎接口**
 
 ```kotlin
-package com.example.counter.core.detection
+package com.snuabar.counter.core.detection
 
 import kotlinx.coroutines.flow.Flow
 
@@ -690,7 +690,7 @@ data class CountEvent(
 - [ ] **步骤 2：实现帧差分器**
 
 ```kotlin
-package com.example.counter.core.detection.vision
+package com.snuabar.counter.core.detection.vision
 
 import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
@@ -729,14 +729,14 @@ class FrameDifferencer {
 - [ ] **步骤 3：实现视觉检测引擎**
 
 ```kotlin
-package com.example.counter.core.detection.vision
+package com.snuabar.counter.core.detection.vision
 
 import android.content.Context
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.example.counter.core.detection.*
+import com.snuabar.counter.core.detection.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.opencv.core.Mat
@@ -910,12 +910,12 @@ git commit -m "feat(core): implement vision detection engine with frame differen
 - [ ] **步骤 1：创建 CountingViewModel**
 
 ```kotlin
-package com.example.counter.ui.screen.counting
+package com.snuabar.counter.ui.screen.counting
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.counter.core.detection.vision.VisionDetectionEngine
-import com.example.counter.core.detection.CountEvent
+import com.snuabar.counter.core.detection.vision.VisionDetectionEngine
+import com.snuabar.counter.core.detection.CountEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -980,7 +980,7 @@ class CountingViewModel @Inject constructor(
 - [ ] **步骤 2：创建 CountingScreen**
 
 ```kotlin
-package com.example.counter.ui.screen.counting
+package com.snuabar.counter.ui.screen.counting
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -1076,7 +1076,7 @@ fun CountingScreen(
 - [ ] **步骤 3：创建 CameraPreview 组件**
 
 ```kotlin
-package com.example.counter.ui.component
+package com.snuabar.counter.ui.component
 
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
@@ -1127,15 +1127,15 @@ fun CameraPreview(
 - [ ] **步骤 4：更新 MainActivity 设置 Navigation**
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import com.example.counter.ui.screen.counting.CountingScreen
-import com.example.counter.ui.theme.CounterTheme
+import com.snuabar.counter.ui.screen.counting.CountingScreen
+import com.snuabar.counter.ui.theme.CounterTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -1174,12 +1174,12 @@ git commit -m "feat(ui): implement basic counting screen with Compose, ViewModel
 - [ ] **步骤 1：创建数据库初始化器，预置拍手和跳绳模板**
 
 ```kotlin
-package com.example.counter.data.local.db.initializer
+package com.snuabar.counter.data.local.db.initializer
 
-import com.example.counter.data.local.db.dao.TemplateDao
-import com.example.counter.data.local.db.entity.TemplateEntity
-import com.example.counter.domain.model.SensorType
-import com.example.counter.domain.model.TemplateType
+import com.snuabar.counter.data.local.db.dao.TemplateDao
+import com.snuabar.counter.data.local.db.entity.TemplateEntity
+import com.snuabar.counter.domain.model.SensorType
+import com.snuabar.counter.domain.model.TemplateType
 import javax.inject.Inject
 
 class DatabaseInitializer @Inject constructor(
@@ -1220,10 +1220,10 @@ class DatabaseInitializer @Inject constructor(
 - [ ] **步骤 2：在 Application 初始化时调用**
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.app.Application
-import com.example.counter.data.local.db.initializer.DatabaseInitializer
+import com.snuabar.counter.data.local.db.initializer.DatabaseInitializer
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
@@ -1263,10 +1263,10 @@ git commit -m "feat(data): initialize builtin templates (clap, jump-rope) on app
 - [ ] **步骤 1：创建 Use Case**
 
 ```kotlin
-package com.example.counter.domain.usecase
+package com.snuabar.counter.domain.usecase
 
-import com.example.counter.domain.model.*
-import com.example.counter.domain.repository.*
+import com.snuabar.counter.domain.model.*
+import com.snuabar.counter.domain.repository.*
 import javax.inject.Inject
 
 class SaveSessionUseCase @Inject constructor(
@@ -1287,7 +1287,7 @@ class GetSessionHistoryUseCase @Inject constructor(
 - [ ] **步骤 2：创建 HistoryScreen**
 
 ```kotlin
-package com.example.counter.ui.screen.history
+package com.snuabar.counter.ui.screen.history
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1297,7 +1297,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.counter.domain.model.CountingSession
+import com.snuabar.counter.domain.model.CountingSession
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -1375,7 +1375,7 @@ git commit -m "feat(history): implement session management and history screen"
 - [ ] **步骤 1：定义导航路由**
 
 ```kotlin
-package com.example.counter.ui.navigation
+package com.snuabar.counter.ui.navigation
 
 sealed class Screen(val route: String) {
     object Counting : Screen("counting")
@@ -1388,14 +1388,14 @@ sealed class Screen(val route: String) {
 - [ ] **步骤 2：创建导航图**
 
 ```kotlin
-package com.example.counter.ui.navigation
+package com.snuabar.counter.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.example.counter.ui.screen.counting.CountingScreen
-import com.example.counter.ui.screen.history.HistoryScreen
+import com.snuabar.counter.ui.screen.counting.CountingScreen
+import com.snuabar.counter.ui.screen.history.HistoryScreen
 
 @Composable
 fun NavGraph(navController: NavHostController) {
@@ -1417,7 +1417,7 @@ fun NavGraph(navController: NavHostController) {
 - [ ] **步骤 3：创建主布局（含底部 Tab 栏）**
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -1427,9 +1427,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.counter.ui.navigation.NavGraph
-import com.example.counter.ui.navigation.Screen
-import com.example.counter.ui.theme.CounterTheme
+import com.snuabar.counter.ui.navigation.NavGraph
+import com.snuabar.counter.ui.navigation.Screen
+import com.snuabar.counter.ui.theme.CounterTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
