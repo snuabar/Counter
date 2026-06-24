@@ -7,6 +7,7 @@ import com.snuabar.counter.domain.model.Template
 import com.snuabar.counter.domain.model.TemplateType
 import com.snuabar.counter.domain.repository.TemplateRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -41,6 +42,27 @@ class TemplateRepositoryImpl @Inject constructor(
             var result = emptyList<Template>()
             flow.collect { result = it }
             result
+        }
+    }
+
+    override suspend fun ensureBuiltinTemplates() {
+        val existing = templateDao.getAll().first()
+        if (existing.none { it.type == TemplateType.BUILTIN.name }) {
+            val builtinTemplates = listOf(
+                TemplateEntity(
+                    name = "拍手",
+                    type = TemplateType.BUILTIN.name,
+                    sensorType = SensorType.VISION.name,
+                    threshold = 0.7f
+                ),
+                TemplateEntity(
+                    name = "跳绳",
+                    type = TemplateType.BUILTIN.name,
+                    sensorType = SensorType.VISION.name,
+                    threshold = 0.7f
+                )
+            )
+            builtinTemplates.forEach { templateDao.insert(it) }
         }
     }
 
