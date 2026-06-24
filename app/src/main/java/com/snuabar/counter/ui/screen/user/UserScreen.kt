@@ -1,5 +1,6 @@
 package com.snuabar.counter.ui.screen.user
 
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,9 +12,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.snuabar.counter.core.biometric.BiometricAuthManager
 import com.snuabar.counter.domain.model.User
+import javax.inject.Inject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +28,7 @@ fun UserScreen(
     val currentUserId by viewModel.currentUserId.collectAsState(initial = null)
     val showDialog by viewModel.showAddUserDialog.collectAsState()
     val newUserName by viewModel.newUserName.collectAsState()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -48,7 +53,23 @@ fun UserScreen(
                 UserList(
                     users = users,
                     currentUserId = currentUserId,
-                    onSwitchUser = { viewModel.switchUser(it) },
+                    onSwitchUser = { userId ->
+                        val activity = context as? ComponentActivity
+                        if (activity != null) {
+                            val biometricAuth = BiometricAuthManager(activity)
+                            if (biometricAuth.isAvailable()) {
+                                biometricAuth.authenticate(
+                                    activity,
+                                    onSuccess = { viewModel.switchUser(userId) },
+                                    onError = { /* TODO: show error */ }
+                                )
+                            } else {
+                                viewModel.switchUser(userId)
+                            }
+                        } else {
+                            viewModel.switchUser(userId)
+                        }
+                    },
                     onDeleteUser = { viewModel.deleteUser(it) }
                 )
             }
