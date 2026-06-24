@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
+import com.snuabar.counter.data.local.prefs.ThemeMode
 import com.snuabar.counter.ui.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,6 +25,7 @@ fun SettingsScreen(
 ) {
     val currentUser by viewModel.currentUser.collectAsState()
     val threshold by viewModel.threshold.collectAsState()
+    val themeMode by viewModel.themeMode.collectAsState()
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -97,6 +99,41 @@ fun SettingsScreen(
                         valueRange = 0.1f..1.0f,
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Theme mode setting
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "深色模式",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    ThemeMode.values().forEach { mode ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { viewModel.setThemeMode(mode) }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = themeMode == mode,
+                                onClick = { viewModel.setThemeMode(mode) }
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = when (mode) {
+                                    ThemeMode.SYSTEM -> "跟随系统"
+                                    ThemeMode.LIGHT -> "浅色"
+                                    ThemeMode.DARK -> "深色"
+                                }
+                            )
+                        }
+                    }
                 }
             }
 

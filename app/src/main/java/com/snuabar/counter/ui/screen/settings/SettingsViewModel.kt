@@ -2,6 +2,8 @@ package com.snuabar.counter.ui.screen.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.snuabar.counter.data.local.prefs.ThemeMode
+import com.snuabar.counter.data.local.prefs.ThemePreferences
 import com.snuabar.counter.domain.model.User
 import com.snuabar.counter.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -13,7 +15,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val userRepository: UserRepository
+    private val userRepository: UserRepository,
+    private val themePreferences: ThemePreferences
 ) : ViewModel() {
 
     private val _currentUser = MutableStateFlow<User?>(null)
@@ -21,6 +24,8 @@ class SettingsViewModel @Inject constructor(
 
     private val _threshold = MutableStateFlow(0.7f)
     val threshold: StateFlow<Float> = _threshold.asStateFlow()
+
+    val themeMode: StateFlow<ThemeMode> = MutableStateFlow(ThemeMode.SYSTEM).asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -33,9 +38,20 @@ class SettingsViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            themePreferences.themeMode.collect { mode ->
+                (themeMode as MutableStateFlow).value = mode
+            }
+        }
     }
 
     fun setThreshold(value: Float) {
         _threshold.value = value.coerceIn(0.1f, 1.0f)
+    }
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch {
+            themePreferences.setThemeMode(mode)
+        }
     }
 }
