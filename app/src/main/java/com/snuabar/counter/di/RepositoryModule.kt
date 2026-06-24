@@ -1,5 +1,7 @@
 package com.snuabar.counter.di
 
+import com.snuabar.counter.core.detection.DetectionEngineFactory
+import com.snuabar.counter.core.detection.DetectionEngineFactoryImpl
 import com.snuabar.counter.data.repository.CountingSessionRepositoryImpl
 import com.snuabar.counter.data.repository.TemplateRepositoryImpl
 import com.snuabar.counter.data.repository.UserRepositoryImpl
@@ -28,4 +30,9 @@ abstract class RepositoryModule {
     abstract fun bindUserRepository(
         impl: UserRepositoryImpl
     ): UserRepository
+
+    @Binds
+    abstract fun bindDetectionEngineFactory(
+        impl: DetectionEngineFactoryImpl
+    ): DetectionEngineFactory
 }
