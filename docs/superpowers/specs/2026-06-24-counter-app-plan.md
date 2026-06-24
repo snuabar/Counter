@@ -1544,7 +1544,16 @@ git commit -m "feat(navigation): add bottom tab navigation with Compose Navigati
 - [ ] 实现 JSON 导入恢复功能
 - [ ] 添加文件选择器 UI
 
-#### 任务 21：静态姿势计时（新增）
+---
+
+## Phase 3：增强优化（预计 2-3 周）
+
+### 目标
+TFLite 可选模型、远程备份接口预留、UI 美化、性能优化、单元测试。
+
+### 任务列表
+
+#### 任务 21：静态姿势计时（Phase 3 新增）
 - [ ] 扩展 DetectionEngine 接口支持计时模式
 - [ ] 实现简化人体检测（有人/无人自动暂停/继续）
 - [ ] 复用 CountingScreen UI，中部显示时间 `01:23`
@@ -1556,16 +1565,7 @@ git commit -m "feat(navigation): add bottom tab navigation with Compose Navigati
   - 后台持续计时（锁屏或切出App继续计时，用户可开关）
 - [ ] 计时数据保存到数据库（复用 CountingSession，字段适配）
 - [ ] 模板列表中标注计时类模板（如"平板支撑（计时）"）
-- [ ] Phase 3 预留：ML Pose 高精度姿态检测（判断姿势角度是否标准）
-
----
-
-## Phase 3：增强优化（预计 2-3 周）
-
-### 目标
-TFLite 可选模型、远程备份接口预留、UI 美化、性能优化、单元测试。
-
-### 任务列表
+- [ ] ML Pose 高精度姿态检测（判断姿势角度是否标准）
 
 #### 任务 22：TFLite 集成
 - [ ] 添加 TensorFlow Lite 依赖
