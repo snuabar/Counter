@@ -1,38 +1,38 @@
-# Counter App 实现计划
+﻿# Counter App 螳樒鴫隶｡蛻・
 
-> **面向 AI 代理的工作者：** 必需子技能：使用 superpowers:subagent-driven-development（推荐）或 superpowers:executing-plans 逐任务实现此计划。步骤使用复选框（`- [ ]`）语法来跟踪进度。
+> **髱｢蜷・AI 莉｣逅・噪蟾･菴懆・ｼ・* 蠢・怙蟄先橿閭ｽ・壻ｽｿ逕ｨ superpowers:subagent-driven-development・域耳闕撰ｼ画・ superpowers:executing-plans 騾蝉ｻｻ蜉｡螳樒鴫豁､隶｡蛻偵よｭ･鬪､菴ｿ逕ｨ螟埼画｡・ｼ・- [ ]`・芽ｯｭ豕墓擂霍溯ｸｪ霑帛ｺｦ縲・
 
-**目标：** 构建一个安卓端智能计数应用，通过摄像头/麦克风捕获重复动作/声音自动计数，支持内置模板和自定义样本。
+**逶ｮ譬・ｼ・* 譫・ｻｺ荳荳ｪ螳牙酷遶ｯ譎ｺ閭ｽ隶｡謨ｰ蠎皮畑・碁夊ｿ・槍蜒丞､ｴ/鮗ｦ蜈矩｣取黒闔ｷ驥榊､榊勘菴・螢ｰ髻ｳ閾ｪ蜉ｨ隶｡謨ｰ・梧髪謖∝・鄂ｮ讓｡譚ｿ蜥瑚・螳壻ｹ画ｷ譛ｬ縲・
 
-**架构：** 采用 MVVM + Repository + Clean Architecture 分层架构，视觉/音频检测引擎完全解耦，传统算法（帧差分/FFT）为主，TFLite 可选扩展。
+**譫ｶ譫・ｼ・* 驥・畑 MVVM + Repository + Clean Architecture 蛻・ｱよ楔譫・ｼ瑚ｧ・ｧ・髻ｳ鬚第｣豬句ｼ墓梼螳悟・隗｣閠ｦ・御ｼ扈溽ｮ玲ｳ包ｼ亥ｸｧ蟾ｮ蛻・FFT・我ｸｺ荳ｻ・卦FLite 蜿ｯ騾画黄螻輔・
 
-**技术栈：** Kotlin + Jetpack Compose + Hilt + Room + CameraX + OpenCV + AudioRecord
-
----
-
-## Phase 1：MVP（预计 4-6 周）
-
-### 目标
-可运行的基础计数器：单用户、仅摄像头视觉检测（帧差分）、内置拍手和跳绳模板、基础计数 + 会话保存 + 历史列表。
+**謚譛ｯ譬茨ｼ・* Kotlin + Jetpack Compose + Hilt + Room + CameraX + OpenCV + AudioRecord
 
 ---
 
-### 任务 1：项目初始化
+## Phase 1・哺VP・磯｢・ｮ｡ 4-6 蜻ｨ・・
 
-**文件：**
-- 创建：`build.gradle.kts` (project-level)
-- 创建：`app/build.gradle.kts`
-- 创建：`app/src/main/AndroidManifest.xml`
-- 创建：`settings.gradle.kts`
+### 逶ｮ譬・
+蜿ｯ霑占｡檎噪蝓ｺ遑隶｡謨ｰ蝎ｨ・壼黒逕ｨ謌ｷ縲∽ｻ・槍蜒丞､ｴ隗・ｧ画｣豬具ｼ亥ｸｧ蟾ｮ蛻・ｼ峨∝・鄂ｮ諡肴焔蜥瑚ｷｳ扈ｳ讓｡譚ｿ縲∝渕遑隶｡謨ｰ + 莨夊ｯ昜ｿ晏ｭ・+ 蜴・彰蛻苓｡ｨ縲・
 
-- [ ] **步骤 1：创建 Android Studio 项目**
-  - 包名：`com.example.counter`
-  - 最低 SDK：API 24 (Android 7.0)
-  - 目标 SDK：API 34
-  - 语言：Kotlin
-  - 构建系统：Gradle with Kotlin DSL
+---
 
-- [ ] **步骤 2：配置项目级 build.gradle.kts**
+### 莉ｻ蜉｡ 1・夐｡ｹ逶ｮ蛻晏ｧ句喧
+
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻build.gradle.kts` (project-level)
+- 蛻帛ｻｺ・啻app/build.gradle.kts`
+- 蛻帛ｻｺ・啻app/src/main/AndroidManifest.xml`
+- 蛻帛ｻｺ・啻settings.gradle.kts`
+
+- [ ] **豁･鬪､ 1・壼・蟒ｺ Android Studio 鬘ｹ逶ｮ**
+  - 蛹・錐・啻com.snuabar.counter`
+  - 譛菴・SDK・哂PI 24 (Android 7.0)
+  - 逶ｮ譬・SDK・哂PI 34
+  - 隸ｭ險・哮otlin
+  - 譫・ｻｺ邉ｻ扈滂ｼ哦radle with Kotlin DSL
+
+- [ ] **豁･鬪､ 2・夐・鄂ｮ鬘ｹ逶ｮ郤ｧ build.gradle.kts**
 
 ```kotlin
 // Top-level build file
@@ -45,7 +45,7 @@ plugins {
 }
 ```
 
-- [ ] **步骤 3：配置模块级 app/build.gradle.kts**
+- [ ] **豁･鬪､ 3・夐・鄂ｮ讓｡蝮礼ｺｧ app/build.gradle.kts**
 
 ```kotlin
 plugins {
@@ -56,11 +56,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.counter"
+    namespace = "com.snuabar.counter"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.counter"
+        applicationId = "com.snuabar.counter"
         minSdk = 24
         targetSdk = 34
         versionCode = 1
@@ -152,7 +152,7 @@ dependencies {
 }
 ```
 
-- [ ] **步骤 4：配置 AndroidManifest.xml**
+- [ ] **豁･鬪､ 4・夐・鄂ｮ AndroidManifest.xml**
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -191,12 +191,12 @@ dependencies {
 </manifest>
 ```
 
-- [ ] **步骤 5：创建 Application 类**
+- [ ] **豁･鬪､ 5・壼・蟒ｺ Application 邀ｻ**
 
-**文件：** `app/src/main/java/com/example/counter/CounterApplication.kt`
+**譁・ｻｶ・・* `app/src/main/java/com/example/counter/CounterApplication.kt`
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
@@ -205,19 +205,19 @@ import dagger.hilt.android.HiltAndroidApp
 class CounterApplication : Application()
 ```
 
-- [ ] **步骤 6：创建 MainActivity**
+- [ ] **豁･鬪､ 6・壼・蟒ｺ MainActivity**
 
-**文件：** `app/src/main/java/com/example/counter/MainActivity.kt`
+**譁・ｻｶ・・* `app/src/main/java/com/example/counter/MainActivity.kt`
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import com.example.counter.ui.theme.CounterTheme
+import com.snuabar.counter.ui.theme.CounterTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -236,7 +236,7 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-- [ ] **步骤 7：Commit**
+- [ ] **豁･鬪､ 7・咾ommit**
 
 ```bash
 git add .
@@ -245,44 +245,44 @@ git commit -m "chore: initialize Android project with Compose, Hilt, Room, Camer
 
 ---
 
-### 任务 2：建立 Clean Architecture 目录结构
+### 莉ｻ蜉｡ 2・壼ｻｺ遶・Clean Architecture 逶ｮ蠖慕ｻ捺桷
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/data/` 层目录
-- 创建：`app/src/main/java/com/example/counter/domain/` 层目录
-- 创建：`app/src/main/java/com/example/counter/ui/` 层目录
-- 创建：`app/src/main/java/com/example/counter/di/` 层目录
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/` 螻ら岼蠖・
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/` 螻ら岼蠖・
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/` 螻ら岼蠖・
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/di/` 螻ら岼蠖・
 
-- [ ] **步骤 1：创建目录结构**
+- [ ] **豁･鬪､ 1・壼・蟒ｺ逶ｮ蠖慕ｻ捺桷**
 
 ```
 app/src/main/java/com/example/counter/
-├── data/
-│   ├── local/
-│   │   ├── db/
-│   │   │   ├── CounterDatabase.kt
-│   │   │   ├── dao/
-│   │   │   └── entity/
-│   │   └── datasource/
-│   └── repository/
-├── domain/
-│   ├── model/
-│   ├── repository/
-│   └── usecase/
-├── ui/
-│   ├── theme/
-│   ├── screen/
-│   └── component/
-├── di/
-│   └── AppModule.kt
-└── core/
-    ├── detection/
-    │   ├── VisionDetectionEngine.kt
-    │   └── DetectionConfig.kt
-    └── util/
+笏懌楳笏 data/
+笏・  笏懌楳笏 local/
+笏・  笏・  笏懌楳笏 db/
+笏・  笏・  笏・  笏懌楳笏 CounterDatabase.kt
+笏・  笏・  笏・  笏懌楳笏 dao/
+笏・  笏・  笏・  笏披楳笏 entity/
+笏・  笏・  笏披楳笏 datasource/
+笏・  笏披楳笏 repository/
+笏懌楳笏 domain/
+笏・  笏懌楳笏 model/
+笏・  笏懌楳笏 repository/
+笏・  笏披楳笏 usecase/
+笏懌楳笏 ui/
+笏・  笏懌楳笏 theme/
+笏・  笏懌楳笏 screen/
+笏・  笏披楳笏 component/
+笏懌楳笏 di/
+笏・  笏披楳笏 AppModule.kt
+笏披楳笏 core/
+    笏懌楳笏 detection/
+    笏・  笏懌楳笏 VisionDetectionEngine.kt
+    笏・  笏披楳笏 DetectionConfig.kt
+    笏披楳笏 util/
 ```
 
-- [ ] **步骤 2：Commit**
+- [ ] **豁･鬪､ 2・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/
@@ -291,18 +291,18 @@ git commit -m "chore: setup Clean Architecture directory structure"
 
 ---
 
-### 任务 3：定义 Domain 层数据模型
+### 莉ｻ蜉｡ 3・壼ｮ壻ｹ・Domain 螻よ焚謐ｮ讓｡蝙・
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/domain/model/User.kt`
-- 创建：`app/src/main/java/com/example/counter/domain/model/CountingSession.kt`
-- 创建：`app/src/main/java/com/example/counter/domain/model/CountEvent.kt`
-- 创建：`app/src/main/java/com/example/counter/domain/model/Template.kt`
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/model/User.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/model/CountingSession.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/model/CountEvent.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/model/Template.kt`
 
-- [ ] **步骤 1：定义 User 模型**
+- [ ] **豁･鬪､ 1・壼ｮ壻ｹ・User 讓｡蝙・*
 
 ```kotlin
-package com.example.counter.domain.model
+package com.snuabar.counter.domain.model
 
 data class User(
     val id: Long = 0,
@@ -312,10 +312,10 @@ data class User(
 )
 ```
 
-- [ ] **步骤 2：定义 CountingSession 模型**
+- [ ] **豁･鬪､ 2・壼ｮ壻ｹ・CountingSession 讓｡蝙・*
 
 ```kotlin
-package com.example.counter.domain.model
+package com.snuabar.counter.domain.model
 
 enum class SensorType { VISION, AUDIO }
 
@@ -335,10 +335,10 @@ data class CountingSession(
 )
 ```
 
-- [ ] **步骤 3：定义 CountEvent 模型**
+- [ ] **豁･鬪､ 3・壼ｮ壻ｹ・CountEvent 讓｡蝙・*
 
 ```kotlin
-package com.example.counter.domain.model
+package com.snuabar.counter.domain.model
 
 data class CountEvent(
     val id: Long = 0,
@@ -349,16 +349,16 @@ data class CountEvent(
 )
 ```
 
-- [ ] **步骤 4：定义 Template 模型**
+- [ ] **豁･鬪､ 4・壼ｮ壻ｹ・Template 讓｡蝙・*
 
 ```kotlin
-package com.example.counter.domain.model
+package com.snuabar.counter.domain.model
 
 enum class TemplateType { BUILTIN, CUSTOM }
 
 data class Template(
     val id: Long = 0,
-    val userId: Long? = null, // null 表示内置模板
+    val userId: Long? = null, // null 陦ｨ遉ｺ蜀・ｽｮ讓｡譚ｿ
     val name: String,
     val type: TemplateType,
     val sensorType: SensorType,
@@ -369,7 +369,7 @@ data class Template(
 )
 ```
 
-- [ ] **步骤 5：Commit**
+- [ ] **豁･鬪､ 5・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/domain/model/
@@ -378,23 +378,23 @@ git commit -m "feat(domain): define core data models (User, Session, Event, Temp
 
 ---
 
-### 任务 4：建立 Room 数据库层
+### 莉ｻ蜉｡ 4・壼ｻｺ遶・Room 謨ｰ謐ｮ蠎灘ｱ・
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/data/local/db/entity/UserEntity.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/entity/CountingSessionEntity.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/entity/CountEventEntity.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/entity/TemplateEntity.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/dao/UserDao.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/dao/CountingSessionDao.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/dao/CountEventDao.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/dao/TemplateDao.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/CounterDatabase.kt`
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/entity/UserEntity.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/entity/CountingSessionEntity.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/entity/CountEventEntity.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/entity/TemplateEntity.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/dao/UserDao.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/dao/CountingSessionDao.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/dao/CountEventDao.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/dao/TemplateDao.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/CounterDatabase.kt`
 
-- [ ] **步骤 1-4：创建 Entity 类（示例 UserEntity）**
+- [ ] **豁･鬪､ 1-4・壼・蟒ｺ Entity 邀ｻ・育､ｺ萓・UserEntity・・*
 
 ```kotlin
-package com.example.counter.data.local.db.entity
+package com.snuabar.counter.data.local.db.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
@@ -409,17 +409,17 @@ data class UserEntity(
 )
 ```
 
-类似地创建其他 Entity（略）。
+邀ｻ莨ｼ蝨ｰ蛻帛ｻｺ蜈ｶ莉・Entity・育払・峨・
 
-- [ ] **步骤 5-8：创建 DAO 接口（示例）**
+- [ ] **豁･鬪､ 5-8・壼・蟒ｺ DAO 謗･蜿｣・育､ｺ萓具ｼ・*
 
 ```kotlin
-package com.example.counter.data.local.db.dao
+package com.snuabar.counter.data.local.db.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
-import com.example.counter.data.local.db.entity.UserEntity
+import com.snuabar.counter.data.local.db.entity.UserEntity
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -435,15 +435,15 @@ interface UserDao {
 }
 ```
 
-- [ ] **步骤 9：创建 Database 类**
+- [ ] **豁･鬪､ 9・壼・蟒ｺ Database 邀ｻ**
 
 ```kotlin
-package com.example.counter.data.local.db
+package com.snuabar.counter.data.local.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
-import com.example.counter.data.local.db.dao.*
-import com.example.counter.data.local.db.entity.*
+import com.snuabar.counter.data.local.db.dao.*
+import com.snuabar.counter.data.local.db.entity.*
 
 @Database(
     entities = [
@@ -463,7 +463,7 @@ abstract class CounterDatabase : RoomDatabase() {
 }
 ```
 
-- [ ] **步骤 10：Commit**
+- [ ] **豁･鬪､ 10・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/data/local/
@@ -472,20 +472,20 @@ git commit -m "feat(data): setup Room database with entities and DAOs"
 
 ---
 
-### 任务 5：创建 Repository 层
+### 莉ｻ蜉｡ 5・壼・蟒ｺ Repository 螻・
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/domain/repository/CountingSessionRepository.kt`
-- 创建：`app/src/main/java/com/example/counter/data/repository/CountingSessionRepositoryImpl.kt`
-- 创建：`app/src/main/java/com/example/counter/domain/repository/TemplateRepository.kt`
-- 创建：`app/src/main/java/com/example/counter/data/repository/TemplateRepositoryImpl.kt`
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/repository/CountingSessionRepository.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/repository/CountingSessionRepositoryImpl.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/repository/TemplateRepository.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/repository/TemplateRepositoryImpl.kt`
 
-- [ ] **步骤 1：定义 Repository 接口**
+- [ ] **豁･鬪､ 1・壼ｮ壻ｹ・Repository 謗･蜿｣**
 
 ```kotlin
-package com.example.counter.domain.repository
+package com.snuabar.counter.domain.repository
 
-import com.example.counter.domain.model.*
+import com.snuabar.counter.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
 interface CountingSessionRepository {
@@ -505,15 +505,15 @@ interface TemplateRepository {
 }
 ```
 
-- [ ] **步骤 2：实现 Repository**
+- [ ] **豁･鬪､ 2・壼ｮ樒鴫 Repository**
 
 ```kotlin
-package com.example.counter.data.repository
+package com.snuabar.counter.data.repository
 
-import com.example.counter.data.local.db.dao.*
-import com.example.counter.data.local.db.entity.*
-import com.example.counter.domain.model.*
-import com.example.counter.domain.repository.*
+import com.snuabar.counter.data.local.db.dao.*
+import com.snuabar.counter.data.local.db.entity.*
+import com.snuabar.counter.domain.model.*
+import com.snuabar.counter.domain.repository.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -553,7 +553,7 @@ class CountingSessionRepositoryImpl @Inject constructor(
 }
 ```
 
-- [ ] **步骤 3：Commit**
+- [ ] **豁･鬪､ 3・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/data/repository/
@@ -562,21 +562,21 @@ git commit -m "feat(data): implement repository layer with mappers"
 
 ---
 
-### 任务 6：配置 Hilt 依赖注入
+### 莉ｻ蜉｡ 6・夐・鄂ｮ Hilt 萓晁ｵ匁ｳｨ蜈･
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/di/AppModule.kt`
-- 创建：`app/src/main/java/com/example/counter/di/DatabaseModule.kt`
-- 创建：`app/src/main/java/com/example/counter/di/RepositoryModule.kt`
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/di/AppModule.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/di/DatabaseModule.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/di/RepositoryModule.kt`
 
-- [ ] **步骤 1：创建 DatabaseModule**
+- [ ] **豁･鬪､ 1・壼・蟒ｺ DatabaseModule**
 
 ```kotlin
-package com.example.counter.di
+package com.snuabar.counter.di
 
 import android.content.Context
 import androidx.room.Room
-import com.example.counter.data.local.db.CounterDatabase
+import com.snuabar.counter.data.local.db.CounterDatabase
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -609,13 +609,13 @@ object DatabaseModule {
 }
 ```
 
-- [ ] **步骤 2：创建 RepositoryModule**
+- [ ] **豁･鬪､ 2・壼・蟒ｺ RepositoryModule**
 
 ```kotlin
-package com.example.counter.di
+package com.snuabar.counter.di
 
-import com.example.counter.data.repository.*
-import com.example.counter.domain.repository.*
+import com.snuabar.counter.data.repository.*
+import com.snuabar.counter.domain.repository.*
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -637,7 +637,7 @@ abstract class RepositoryModule {
 }
 ```
 
-- [ ] **步骤 3：Commit**
+- [ ] **豁･鬪､ 3・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/di/
@@ -646,20 +646,20 @@ git commit -m "feat(di): setup Hilt modules for Database and Repository injectio
 
 ---
 
-### 任务 7：实现视觉检测引擎（核心）
+### 莉ｻ蜉｡ 7・壼ｮ樒鴫隗・ｧ画｣豬句ｼ墓梼・域ｸ蠢・ｼ・
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/core/detection/DetectionEngine.kt`
-- 创建：`app/src/main/java/com/example/counter/core/detection/DetectionConfig.kt`
-- 创建：`app/src/main/java/com/example/counter/core/detection/CountEvent.kt`
-- 创建：`app/src/main/java/com/example/counter/core/detection/vision/VisionDetectionEngine.kt`
-- 创建：`app/src/main/java/com/example/counter/core/detection/vision/FrameDifferencer.kt`
-- 创建：`app/src/main/java/com/example/counter/core/detection/vision/MotionDetector.kt`
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/core/detection/DetectionEngine.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/core/detection/DetectionConfig.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/core/detection/CountEvent.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/core/detection/vision/VisionDetectionEngine.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/core/detection/vision/FrameDifferencer.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/core/detection/vision/MotionDetector.kt`
 
-- [ ] **步骤 1：定义检测引擎接口**
+- [ ] **豁･鬪､ 1・壼ｮ壻ｹ画｣豬句ｼ墓梼謗･蜿｣**
 
 ```kotlin
-package com.example.counter.core.detection
+package com.snuabar.counter.core.detection
 
 import kotlinx.coroutines.flow.Flow
 
@@ -687,10 +687,10 @@ data class CountEvent(
 )
 ```
 
-- [ ] **步骤 2：实现帧差分器**
+- [ ] **豁･鬪､ 2・壼ｮ樒鴫蟶ｧ蟾ｮ蛻・勣**
 
 ```kotlin
-package com.example.counter.core.detection.vision
+package com.snuabar.counter.core.detection.vision
 
 import org.opencv.core.*
 import org.opencv.imgproc.Imgproc
@@ -726,17 +726,17 @@ class FrameDifferencer {
 }
 ```
 
-- [ ] **步骤 3：实现视觉检测引擎**
+- [ ] **豁･鬪､ 3・壼ｮ樒鴫隗・ｧ画｣豬句ｼ墓梼**
 
 ```kotlin
-package com.example.counter.core.detection.vision
+package com.snuabar.counter.core.detection.vision
 
 import android.content.Context
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
-import com.example.counter.core.detection.*
+import com.snuabar.counter.core.detection.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import org.opencv.core.Mat
@@ -759,7 +759,7 @@ class VisionDetectionEngine @Inject constructor(
     private var currentCount = 0
     private var threshold = 0.7f
     private var lastCountTime = 0L
-    private val debounceMs = 500L // 最小间隔 500ms
+    private val debounceMs = 500L // 譛蟆城龍髫・500ms
 
     private val frameDifferencer = FrameDifferencer()
     private val motionHistory = mutableListOf<Double>()
@@ -838,12 +838,12 @@ class VisionDetectionEngine @Inject constructor(
     private fun analyzeMotionPattern() {
         if (motionHistory.size < 5) return
 
-        // 简单的峰值检测算法
+        // 邂蜊慕噪蟲ｰ蛟ｼ譽豬狗ｮ玲ｳ・
         val current = motionHistory.last()
         val previous = motionHistory[motionHistory.size - 2]
         val beforePrevious = motionHistory[motionHistory.size - 3]
 
-        // 检测局部峰值：当前 > 前一个 && 当前 > 后一个
+        // 譽豬句ｱ驛ｨ蟲ｰ蛟ｼ・壼ｽ灘燕 > 蜑堺ｸ荳ｪ && 蠖灘燕 > 蜷惹ｸ荳ｪ
         if (current > previous && current > beforePrevious && current > 50.0) {
             val now = System.currentTimeMillis()
             if (now - lastCountTime > debounceMs) {
@@ -883,14 +883,14 @@ class VisionDetectionEngine @Inject constructor(
     }
 
     private fun ImageProxy.toMat(): Mat? {
-        // 实现 ImageProxy 到 OpenCV Mat 的转换
-        // 这里简化处理，实际实现需要根据 ImageProxy 的格式进行转换
-        return null // TODO: 实现转换逻辑
+        // 螳樒鴫 ImageProxy 蛻ｰ OpenCV Mat 逧・ｽｬ謐｢
+        // 霑咎㈹邂蛹門､・炊・悟ｮ樣刔螳樒鴫髴隕∵ｹ謐ｮ ImageProxy 逧・ｼ蠑剰ｿ幄｡瑚ｽｬ謐｢
+        return null // TODO: 螳樒鴫霓ｬ謐｢騾ｻ霎・
     }
 }
 ```
 
-- [ ] **步骤 4：Commit**
+- [ ] **豁･鬪､ 4・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/core/detection/
@@ -899,23 +899,23 @@ git commit -m "feat(core): implement vision detection engine with frame differen
 
 ---
 
-### 任务 8：实现基础 Compose UI（计数界面）
+### 莉ｻ蜉｡ 8・壼ｮ樒鴫蝓ｺ遑 Compose UI・郁ｮ｡謨ｰ逡碁擇・・
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/ui/screen/counting/CountingScreen.kt`
-- 创建：`app/src/main/java/com/example/counter/ui/screen/counting/CountingViewModel.kt`
-- 创建：`app/src/main/java/com/example/counter/ui/component/CameraPreview.kt`
-- 创建：`app/src/main/java/com/example/counter/ui/component/CountDisplay.kt`
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/screen/counting/CountingScreen.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/screen/counting/CountingViewModel.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/component/CameraPreview.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/component/CountDisplay.kt`
 
-- [ ] **步骤 1：创建 CountingViewModel**
+- [ ] **豁･鬪､ 1・壼・蟒ｺ CountingViewModel**
 
 ```kotlin
-package com.example.counter.ui.screen.counting
+package com.snuabar.counter.ui.screen.counting
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.counter.core.detvision.VisionDetectionEngine
-import com.example.counter.core.detection.CountEvent
+import com.snuabar.counter.core.detvision.VisionDetectionEngine
+import com.snuabar.counter.core.detection.CountEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -977,10 +977,10 @@ class CountingViewModel @Inject constructor(
 }
 ```
 
-- [ ] **步骤 2：创建 CountingScreen**
+- [ ] **豁･鬪､ 2・壼・蟒ｺ CountingScreen**
 
 ```kotlin
-package com.example.counter.ui.screen.counting
+package com.snuabar.counter.ui.screen.counting
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -1007,14 +1007,14 @@ fun CountingScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // 顶部：标题
+        // 鬘ｶ驛ｨ・壽・｢・
         Text(
-            text = "智能计数器",
+            text = "譎ｺ閭ｽ隶｡謨ｰ蝎ｨ",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(top = 32.dp)
         )
 
-        // 中部：计数显示
+        // 荳ｭ驛ｨ・夊ｮ｡謨ｰ譏ｾ遉ｺ
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.weight(1f),
@@ -1028,13 +1028,13 @@ fun CountingScreen(
             )
 
             Text(
-                text = "置信度: ${(confidence * 100).toInt()}%",
+                text = "鄂ｮ菫｡蠎ｦ: ${(confidence * 100).toInt()}%",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
 
-        // 底部：操作按钮
+        // 蠎暮Κ・壽桃菴懈潔髓ｮ
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1044,7 +1044,7 @@ fun CountingScreen(
                     onClick = { viewModel.startCounting() },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("开始计数")
+                    Text("蠑蟋玖ｮ｡謨ｰ")
                 }
             } else {
                 Row(
@@ -1055,7 +1055,7 @@ fun CountingScreen(
                         onClick = { viewModel.pauseCounting() },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("暂停")
+                        Text("證ょ●")
                     }
                     Button(
                         onClick = {
@@ -1064,7 +1064,7 @@ fun CountingScreen(
                         },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Text("结束")
+                        Text("扈捺據")
                     }
                 }
             }
@@ -1073,10 +1073,10 @@ fun CountingScreen(
 }
 ```
 
-- [ ] **步骤 3：创建 CameraPreview 组件**
+- [ ] **豁･鬪､ 3・壼・蟒ｺ CameraPreview 扈・ｻｶ**
 
 ```kotlin
-package com.example.counter.ui.component
+package com.snuabar.counter.ui.component
 
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
@@ -1124,18 +1124,18 @@ fun CameraPreview(
 }
 ```
 
-- [ ] **步骤 4：更新 MainActivity 设置 Navigation**
+- [ ] **豁･鬪､ 4・壽峩譁ｰ MainActivity 隶ｾ鄂ｮ Navigation**
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import com.example.counter.ui.screen.counting.CountingScreen
-import com.example.counter.ui.theme.CounterTheme
+import com.snuabar.counter.ui.screen.counting.CountingScreen
+import com.snuabar.counter.ui.theme.CounterTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -1156,7 +1156,7 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-- [ ] **步骤 5：Commit**
+- [ ] **豁･鬪､ 5・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/ui/
@@ -1165,21 +1165,21 @@ git commit -m "feat(ui): implement basic counting screen with Compose, ViewModel
 
 ---
 
-### 任务 9：初始化内置模板数据
+### 莉ｻ蜉｡ 9・壼・蟋句喧蜀・ｽｮ讓｡譚ｿ謨ｰ謐ｮ
 
-**文件：**
-- 修改：`app/src/main/java/com/example/counter/data/repository/TemplateRepositoryImpl.kt`
-- 创建：`app/src/main/java/com/example/counter/data/local/db/initializer/DatabaseInitializer.kt`
+**譁・ｻｶ・・*
+- 菫ｮ謾ｹ・啻app/src/main/java/com/example/counter/data/repository/TemplateRepositoryImpl.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/data/local/db/initializer/DatabaseInitializer.kt`
 
-- [ ] **步骤 1：创建数据库初始化器，预置拍手和跳绳模板**
+- [ ] **豁･鬪､ 1・壼・蟒ｺ謨ｰ謐ｮ蠎灘・蟋句喧蝎ｨ・碁｢・ｽｮ諡肴焔蜥瑚ｷｳ扈ｳ讓｡譚ｿ**
 
 ```kotlin
-package com.example.counter.data.local.db.initializer
+package com.snuabar.counter.data.local.db.initializer
 
-import com.example.counter.data.local.db.dao.TemplateDao
-import com.example.counter.data.local.db.entity.TemplateEntity
-import com.example.counter.domain.model.SensorType
-import com.example.counter.domain.model.TemplateType
+import com.snuabar.counter.data.local.db.dao.TemplateDao
+import com.snuabar.counter.data.local.db.entity.TemplateEntity
+import com.snuabar.counter.domain.model.SensorType
+import com.snuabar.counter.domain.model.TemplateType
 import javax.inject.Inject
 
 class DatabaseInitializer @Inject constructor(
@@ -1192,8 +1192,8 @@ class DatabaseInitializer @Inject constructor(
         val builtinTemplates = listOf(
             TemplateEntity(
                 id = 1,
-                userId = null, // null 表示内置模板
-                name = "拍手",
+                userId = null, // null 陦ｨ遉ｺ蜀・ｽｮ讓｡譚ｿ
+                name = "諡肴焔",
                 type = TemplateType.BUILTIN.name,
                 sensorType = SensorType.VISION.name,
                 mediaPath = null,
@@ -1203,7 +1203,7 @@ class DatabaseInitializer @Inject constructor(
             TemplateEntity(
                 id = 2,
                 userId = null,
-                name = "跳绳",
+                name = "霍ｳ扈ｳ",
                 type = TemplateType.BUILTIN.name,
                 sensorType = SensorType.VISION.name,
                 mediaPath = null,
@@ -1217,13 +1217,13 @@ class DatabaseInitializer @Inject constructor(
 }
 ```
 
-- [ ] **步骤 2：在 Application 初始化时调用**
+- [ ] **豁･鬪､ 2・壼惠 Application 蛻晏ｧ句喧譌ｶ隹・畑**
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.app.Application
-import com.example.counter.data.local.db.initializer.DatabaseInitializer
+import com.snuabar.counter.data.local.db.initializer.DatabaseInitializer
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
@@ -1243,7 +1243,7 @@ class CounterApplication : Application() {
 }
 ```
 
-- [ ] **步骤 3：Commit**
+- [ ] **豁･鬪､ 3・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/data/local/db/initializer/
@@ -1252,21 +1252,21 @@ git commit -m "feat(data): initialize builtin templates (clap, jump-rope) on app
 
 ---
 
-### 任务 10：实现会话管理和历史记录
+### 莉ｻ蜉｡ 10・壼ｮ樒鴫莨夊ｯ晉ｮ｡逅・柱蜴・彰隶ｰ蠖・
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/domain/usecase/SaveSessionUseCase.kt`
-- 创建：`app/src/main/java/com/example/counter/domain/usecase/GetSessionHistoryUseCase.kt`
-- 创建：`app/src/main/java/com/example/counter/ui/screen/history/HistoryScreen.kt`
-- 创建：`app/src/main/java/com/example/counter/ui/screen/history/HistoryViewModel.kt`
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/usecase/SaveSessionUseCase.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/domain/usecase/GetSessionHistoryUseCase.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/screen/history/HistoryScreen.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/screen/history/HistoryViewModel.kt`
 
-- [ ] **步骤 1：创建 Use Case**
+- [ ] **豁･鬪､ 1・壼・蟒ｺ Use Case**
 
 ```kotlin
-package com.example.counter.domain.usecase
+package com.snuabar.counter.domain.usecase
 
-import com.example.counter.domain.model.*
-import com.example.counter.domain.repository.*
+import com.snuabar.counter.domain.model.*
+import com.snuabar.counter.domain.repository.*
 import javax.inject.Inject
 
 class SaveSessionUseCase @Inject constructor(
@@ -1284,10 +1284,10 @@ class GetSessionHistoryUseCase @Inject constructor(
 }
 ```
 
-- [ ] **步骤 2：创建 HistoryScreen**
+- [ ] **豁･鬪､ 2・壼・蟒ｺ HistoryScreen**
 
 ```kotlin
-package com.example.counter.ui.screen.history
+package com.snuabar.counter.ui.screen.history
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -1297,7 +1297,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.counter.domain.model.CountingSession
+import com.snuabar.counter.domain.model.CountingSession
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -1313,7 +1313,7 @@ fun HistoryScreen(
             .padding(16.dp)
     ) {
         Text(
-            text = "历史记录",
+            text = "蜴・彰隶ｰ蠖・,
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 16.dp)
         )
@@ -1341,7 +1341,7 @@ private fun SessionItem(session: CountingSession) {
                 style = MaterialTheme.typography.titleMedium
             )
             Text(
-                text = "次数: ${session.finalCount}",
+                text = "谺｡謨ｰ: ${session.finalCount}",
                 style = MaterialTheme.typography.bodyMedium
             )
             Text(
@@ -1355,7 +1355,7 @@ private fun SessionItem(session: CountingSession) {
 }
 ```
 
-- [ ] **步骤 3：Commit**
+- [ ] **豁･鬪､ 3・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/domain/usecase/
@@ -1365,17 +1365,17 @@ git commit -m "feat(history): implement session management and history screen"
 
 ---
 
-### 任务 11：添加导航和 Tab 栏
+### 莉ｻ蜉｡ 11・壽ｷｻ蜉蟇ｼ闊ｪ蜥・Tab 譬・
 
-**文件：**
-- 创建：`app/src/main/java/com/example/counter/ui/navigation/NavGraph.kt`
-- 创建：`app/src/main/java/com/example/counter/ui/navigation/Screen.kt`
-- 修改：`app/src/main/java/com/example/counter/MainActivity.kt`
+**譁・ｻｶ・・*
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/navigation/NavGraph.kt`
+- 蛻帛ｻｺ・啻app/src/main/java/com/example/counter/ui/navigation/Screen.kt`
+- 菫ｮ謾ｹ・啻app/src/main/java/com/example/counter/MainActivity.kt`
 
-- [ ] **步骤 1：定义导航路由**
+- [ ] **豁･鬪､ 1・壼ｮ壻ｹ牙ｯｼ闊ｪ霍ｯ逕ｱ**
 
 ```kotlin
-package com.example.counter.ui.navigation
+package com.snuabar.counter.ui.navigation
 
 sealed class Screen(val route: String) {
     object Counting : Screen("counting")
@@ -1385,17 +1385,17 @@ sealed class Screen(val route: String) {
 }
 ```
 
-- [ ] **步骤 2：创建导航图**
+- [ ] **豁･鬪､ 2・壼・蟒ｺ蟇ｼ闊ｪ蝗ｾ**
 
 ```kotlin
-package com.example.counter.ui.navigation
+package com.snuabar.counter.ui.navigation
 
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.example.counter.ui.screen.counting.CountingScreen
-import com.example.counter.ui.screen.history.HistoryScreen
+import com.snuabar.counter.ui.screen.counting.CountingScreen
+import com.snuabar.counter.ui.screen.history.HistoryScreen
 
 @Composable
 fun NavGraph(navController: NavHostController) {
@@ -1414,10 +1414,10 @@ fun NavGraph(navController: NavHostController) {
 }
 ```
 
-- [ ] **步骤 3：创建主布局（含底部 Tab 栏）**
+- [ ] **豁･鬪､ 3・壼・蟒ｺ荳ｻ蟶・ｱ・亥性蠎暮Κ Tab 譬擾ｼ・*
 
 ```kotlin
-package com.example.counter
+package com.snuabar.counter
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -1428,9 +1428,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.counter.ui.navigation.NavGraph
-import com.example.counter.ui.navigation.Screen
-import com.example.counter.ui.theme.CounterTheme
+import com.snuabar.counter.ui.navigation.NavGraph
+import com.snuabar.counter.ui.navigation.Screen
+import com.snuabar.counter.ui.theme.CounterTheme
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -1481,7 +1481,7 @@ class MainActivity : ComponentActivity() {
 }
 ```
 
-- [ ] **步骤 4：Commit**
+- [ ] **豁･鬪､ 4・咾ommit**
 
 ```bash
 git add app/src/main/java/com/example/counter/ui/navigation/
@@ -1491,101 +1491,90 @@ git commit -m "feat(navigation): add bottom tab navigation with Compose Navigati
 
 ---
 
-## Phase 2：完整功能（预计 3-4 周）
+## Phase 2・壼ｮ梧紛蜉溯・・磯｢・ｮ｡ 3-4 蜻ｨ・・
 
-### 目标
-多用户、音频检测引擎、自定义样本录制与模板匹配、阈值调节、数据分析与图表、数据导入导出备份。
+### 逶ｮ譬・
+螟夂畑謌ｷ縲・浹鬚第｣豬句ｼ墓梼縲∬・螳壻ｹ画ｷ譛ｬ蠖募宛荳取ｨ｡譚ｿ蛹ｹ驟阪・・蛟ｼ隹・鰍縲∵焚謐ｮ蛻・梵荳主崟陦ｨ縲∵焚謐ｮ蟇ｼ蜈･蟇ｼ蜃ｺ螟・ｻｽ縲・
 
-### 任务列表
+### 莉ｻ蜉｡蛻苓｡ｨ
 
-#### 任务 12：多用户支持
-- [ ] 创建用户管理 UI（创建、切换、删除用户）
-- [ ] 在 Repository 层实现 userId 过滤
-- [ ] 在用户切换时刷新所有数据
+#### 莉ｻ蜉｡ 12・壼､夂畑謌ｷ謾ｯ謖・
+- [ ] 蛻帛ｻｺ逕ｨ謌ｷ邂｡逅・UI・亥・蟒ｺ縲∝・謐｢縲∝唖髯､逕ｨ謌ｷ・・
+- [ ] 蝨ｨ Repository 螻ょｮ樒鴫 userId 霑・ｻ､
+- [ ] 蝨ｨ逕ｨ謌ｷ蛻・困譌ｶ蛻ｷ譁ｰ謇譛画焚謐ｮ
 
-#### 任务 13：音频检测引擎
-- [ ] 使用 AudioRecord 实现音频采集
-- [ ] 实现 FFT 频谱分析
-- [ ] 实现音频能量峰值检测
-- [ ] 集成到 DetectionEngine 接口
+#### 莉ｻ蜉｡ 13・夐浹鬚第｣豬句ｼ墓梼
+- [ ] 菴ｿ逕ｨ AudioRecord 螳樒鴫髻ｳ鬚鷹㊦髮・
+- [ ] 螳樒鴫 FFT 鬚題ｰｱ蛻・梵
+- [ ] 螳樒鴫髻ｳ鬚題・驥丞ｳｰ蛟ｼ譽豬・
+- [ ] 髮・・蛻ｰ DetectionEngine 謗･蜿｣
 
-#### 任务 14：自定义样本录制
-- [ ] 实现样本录制界面（CameraX / AudioRecord）
-- [ ] 支持录制短视频（3-5秒）作为样本，自动截取中间稳定片段
-- [ ] 实现特征提取（视觉：光流直方图 / 关键帧；音频：MFCC）
-- [ ] 保存样本媒体文件到本地 + 特征向量到数据库
+#### 莉ｻ蜉｡ 14・夊・螳壻ｹ画ｷ譛ｬ蠖募宛
+- [ ] 螳樒鴫譬ｷ譛ｬ蠖募宛逡碁擇・・ameraX / AudioRecord・・
+- [ ] 螳樒鴫迚ｹ蠕∵署蜿厄ｼ郁ｧ・ｧ会ｼ壼・豬∫峩譁ｹ蝗ｾ・幃浹鬚托ｼ哺FCC・・
+- [ ] 菫晏ｭ俶ｷ譛ｬ蛻ｰ譛ｬ蝨ｰ譁・ｻｶ + 迚ｹ蠕∝髄驥丞芦謨ｰ謐ｮ蠎・
 
-#### 任务 15：模板匹配
-- [ ] 实现视觉模板匹配（余弦相似度 / 欧氏距离）
-- [ ] 实现音频模板匹配（DTW 距离）
-- [ ] 在检测引擎中集成模板匹配逻辑
+#### 莉ｻ蜉｡ 15・壽ｨ｡譚ｿ蛹ｹ驟・
+- [ ] 螳樒鴫隗・ｧ画ｨ｡譚ｿ蛹ｹ驟搾ｼ井ｽ吝ｼｦ逶ｸ莨ｼ蠎ｦ / 谺ｧ豌剰ｷ晉ｦｻ・・
+- [ ] 螳樒鴫髻ｳ鬚第ｨ｡譚ｿ蛹ｹ驟搾ｼ・TW 霍晉ｦｻ・・
+- [ ] 蝨ｨ譽豬句ｼ墓梼荳ｭ髮・・讓｡譚ｿ蛹ｹ驟埼ｻ霎・
 
-#### 任务 16：阈值调节
-- [ ] 在设置界面添加滑块控件
-- [ ] 实时调节阈值并保存到数据库
-- [ ] 在检测引擎中应用动态阈值
+#### 莉ｻ蜉｡ 16・夐・蛟ｼ隹・鰍
+- [ ] 蝨ｨ隶ｾ鄂ｮ逡碁擇豺ｻ蜉貊大摎謗ｧ莉ｶ
+- [ ] 螳樊慮隹・鰍髦亥ｼ蟷ｶ菫晏ｭ伜芦謨ｰ謐ｮ蠎・
+- [ ] 蝨ｨ譽豬句ｼ墓梼荳ｭ蠎皮畑蜉ｨ諤・・蛟ｼ
 
-#### 任务 16b：计数反馈机制
-- [ ] 添加目标数量设定（用户可输入目标次数，界面显示进度如 23/50）
-- [ ] 实现间隔语音提示（用户可设置每 N 次播报一次当前次数）
-- [ ] 实现完成提示（达到目标后：音效 + 振动 + 视觉动画）
+#### 莉ｻ蜉｡ 17・壽焚謐ｮ蛻・梵荳主崟陦ｨ
+- [ ] 髮・・ MPAndroidChart 謌・Compose Charts
+- [ ] 螳樒鴫雜句漢蝗ｾ・亥捉/譛・蟷ｴ・・
+- [ ] 螳樒鴫扈溯ｮ｡謨ｰ謐ｮ螻慕､ｺ・域ｻ谺｡謨ｰ縲∝ｹｳ蝮・｢醍紫遲会ｼ・
 
-#### 任务 17：数据分析与图表
-- [ ] 集成 MPAndroidChart 或 Compose Charts
-- [ ] 实现趋势图（周/月/年）
-- [ ] 实现统计数据展示（总次数、平均频率等）
-
-#### 任务 18：数据导出/导入备份
-- [ ] 实现 JSON 导出功能
-- [ ] 实现 JSON 导入恢复功能
-- [ ] 添加文件选择器 UI
-
-#### 任务 18b：摄像头选择
-- [ ] 使用 CameraX 枚举所有可用摄像头（后置/前置/广角等）
-- [ ] 在设置中添加摄像头切换下拉菜单
-- [ ] 检测引擎支持动态切换摄像头
+#### 莉ｻ蜉｡ 18・壽焚謐ｮ蟇ｼ蜃ｺ/蟇ｼ蜈･螟・ｻｽ
+- [ ] 螳樒鴫 JSON 蟇ｼ蜃ｺ蜉溯・
+- [ ] 螳樒鴫 JSON 蟇ｼ蜈･諱｢螟榊粥閭ｽ
+- [ ] 豺ｻ蜉譁・ｻｶ騾画叫蝎ｨ UI
 
 ---
 
-## Phase 3：增强优化（预计 2-3 周）
+## Phase 3・壼｢槫ｼｺ莨伜喧・磯｢・ｮ｡ 2-3 蜻ｨ・・
 
-### 目标
-TFLite 可选模型、远程备份接口预留、UI 美化、性能优化、单元测试。
+### 逶ｮ譬・
+TFLite 蜿ｯ騾画ｨ｡蝙九∬ｿ懃ｨ句､・ｻｽ謗･蜿｣鬚・蕗縲ゞI 鄒主喧縲∵ｧ閭ｽ莨伜喧縲∝黒蜈・ｵ玖ｯ輔・
 
-### 任务列表
+### 莉ｻ蜉｡蛻苓｡ｨ
 
-#### 任务 19：TFLite 集成
-- [ ] 添加 TensorFlow Lite 依赖
-- [ ] 实现 TFLite 检测引擎（实现 DetectionEngine 接口）
-- [ ] 预训练模型管理（下载/缓存）
-- [ ] 让用户在传统算法和 TFLite 之间切换
+#### 莉ｻ蜉｡ 19・啜FLite 髮・・
+- [ ] 豺ｻ蜉 TensorFlow Lite 萓晁ｵ・
+- [ ] 螳樒鴫 TFLite 譽豬句ｼ墓梼・亥ｮ樒鴫 DetectionEngine 謗･蜿｣・・
+- [ ] 鬚・ｮｭ扈・ｨ｡蝙狗ｮ｡逅・ｼ井ｸ玖ｽｽ/郛灘ｭ假ｼ・
+- [ ] 隶ｩ逕ｨ謌ｷ蝨ｨ莨扈溽ｮ玲ｳ募柱 TFLite 荵矩龍蛻・困
 
-#### 任务 20：远程备份接口
-- [ ] 设计备份接口抽象
-- [ ] 预留 WebDAV / 自定义 API 扩展点
-- [ ] 实现基础的网络备份 UI
+#### 莉ｻ蜉｡ 20・夊ｿ懃ｨ句､・ｻｽ謗･蜿｣
+- [ ] 隶ｾ隶｡螟・ｻｽ謗･蜿｣謚ｽ雎｡
+- [ ] 鬚・蕗 WebDAV / 閾ｪ螳壻ｹ・API 謇ｩ螻慕せ
+- [ ] 螳樒鴫蝓ｺ遑逧・ｽ醍ｻ懷､・ｻｽ UI
 
-#### 任务 21：UI 美化
-- [ ] 设计并应用 Material You 主题色
-- [ ] 添加过渡动画
-- [ ] 优化不同屏幕尺寸的适配
+#### 莉ｻ蜉｡ 21・啅I 鄒主喧
+- [ ] 隶ｾ隶｡蟷ｶ蠎皮畑 Material You 荳ｻ鬚倩牡
+- [ ] 豺ｻ蜉霑・ｸ｡蜉ｨ逕ｻ
+- [ ] 莨伜喧荳榊酔螻丞ｹ募ｰｺ蟇ｸ逧・る・
 
-#### 任务 22：性能优化
-- [ ] 相机分辨率/帧率降级选项
-- [ ] 低端设备适配
-- [ ] 电池优化（后台限制）
+#### 莉ｻ蜉｡ 22・壽ｧ閭ｽ莨伜喧
+- [ ] 逶ｸ譛ｺ蛻・ｾｨ邇・蟶ｧ邇・剄郤ｧ騾蛾｡ｹ
+- [ ] 菴守ｫｯ隶ｾ螟・る・
+- [ ] 逕ｵ豎莨伜喧・亥錘蜿ｰ髯仙宛・・
 
-#### 任务 23：单元测试
-- [ ] 为 Repository 层编写单元测试
-- [ ] 为检测引擎编写单元测试
-- [ ] 为 ViewModel 编写单元测试
-- [ ] 集成测试（UI 流程）
+#### 莉ｻ蜉｡ 23・壼黒蜈・ｵ玖ｯ・
+- [ ] 荳ｺ Repository 螻らｼ門・蜊募・豬玖ｯ・
+- [ ] 荳ｺ譽豬句ｼ墓梼郛門・蜊募・豬玖ｯ・
+- [ ] 荳ｺ ViewModel 郛門・蜊募・豬玖ｯ・
+- [ ] 髮・・豬玖ｯ包ｼ・I 豬∫ｨ具ｼ・
 
 ---
 
-## 关键难点实现方案
+## 蜈ｳ髞ｮ髫ｾ轤ｹ螳樒鴫譁ｹ譯・
 
-### 1. ImageProxy 转 OpenCV Mat
+### 1. ImageProxy 霓ｬ OpenCV Mat
 ```kotlin
 fun ImageProxy.toMat(): Mat {
     val buffer = planes[0].buffer
@@ -1597,57 +1586,57 @@ fun ImageProxy.toMat(): Mat {
 }
 ```
 
-### 2. 帧差分峰值检测
-- 使用滑动窗口计算运动强度
-- 应用低通滤波平滑噪声
-- 检测局部峰值，使用最小间隔过滤（debounce）
+### 2. 蟶ｧ蟾ｮ蛻・ｳｰ蛟ｼ譽豬・
+- 菴ｿ逕ｨ貊大勘遯怜哨隶｡邂苓ｿ仙勘蠑ｺ蠎ｦ
+- 蠎皮畑菴朱壽ｻ､豕｢蟷ｳ貊大飭螢ｰ
+- 譽豬句ｱ驛ｨ蟲ｰ蛟ｼ・御ｽｿ逕ｨ譛蟆城龍髫碑ｿ・ｻ､・・ebounce・・
 
-### 3. 多用户数据隔离
-- 所有 DAO 查询添加 userId WHERE 条件
-- Repository 层统一过滤
-- 切换用户时清空内存缓存
-
----
-
-## 测试策略
-
-### 单元测试
-- **Repository 层**：使用 Room in-memory 数据库测试所有 CRUD 操作
-- **检测引擎**：使用模拟的帧/音频数据测试算法逻辑
-- **ViewModel**：使用 kotlinx-coroutines-test 测试状态管理
-
-### 集成测试
-- **UI 流程**：使用 Compose UI Test 测试计数流程
-- **相机集成**：使用 CameraX 测试工具验证预览和帧分析
-
-### 手动测试
-- **不同光照条件**：室内、室外、逆光
-- **不同设备**：高端/中端/低端设备
-- **长时间运行**：1小时以上的稳定性测试
+### 3. 螟夂畑謌ｷ謨ｰ謐ｮ髫皮ｦｻ
+- 謇譛・DAO 譟･隸｢豺ｻ蜉 userId WHERE 譚｡莉ｶ
+- Repository 螻らｻ滉ｸ霑・ｻ､
+- 蛻・困逕ｨ謌ｷ譌ｶ貂・ｩｺ蜀・ｭ倡ｼ灘ｭ・
 
 ---
 
-## 验收标准
+## 豬玖ｯ慕ｭ也払
 
-### Phase 1 验收标准
-- [ ] 应用可以正常启动并显示计数界面
-- [ ] 摄像头预览正常显示
-- [ ] 拍手动作可以被正确计数（准确率 > 80%）
-- [ ] 计数结果可以保存到本地数据库
-- [ ] 历史记录页面可以查看已保存的会话
-- [ ] 应用可以稳定运行 30 分钟以上不崩溃
+### 蜊募・豬玖ｯ・
+- **Repository 螻・*・壻ｽｿ逕ｨ Room in-memory 謨ｰ謐ｮ蠎捺ｵ玖ｯ墓園譛・CRUD 謫堺ｽ・
+- **譽豬句ｼ墓梼**・壻ｽｿ逕ｨ讓｡諡溽噪蟶ｧ/髻ｳ鬚第焚謐ｮ豬玖ｯ慕ｮ玲ｳ暮ｻ霎・
+- **ViewModel**・壻ｽｿ逕ｨ kotlinx-coroutines-test 豬玖ｯ慕憾諤∫ｮ｡逅・
 
-### Phase 2 验收标准
-- [ ] 支持多用户切换
-- [ ] 音频检测可以正确计数（拍手/跳绳声音）
-- [ ] 用户可以录制自定义样本并用于计数
-- [ ] 阈值调节实时生效
-- [ ] 数据分析页面展示正确的统计图表
-- [ ] 数据可以导出为 JSON 并导入恢复
+### 髮・・豬玖ｯ・
+- **UI 豬∫ｨ・*・壻ｽｿ逕ｨ Compose UI Test 豬玖ｯ戊ｮ｡謨ｰ豬∫ｨ・
+- **逶ｸ譛ｺ髮・・**・壻ｽｿ逕ｨ CameraX 豬玖ｯ募ｷ･蜈ｷ鬪瑚ｯ・｢・ｧ亥柱蟶ｧ蛻・梵
 
-### Phase 3 验收标准
-- [ ] TFLite 模型可选并提高复杂动作识别率
-- [ ] 远程备份接口预留完成
-- [ ] UI 在所有目标设备上显示正常
-- [ ] 低端设备运行流畅（帧率 > 15fps）
-- [ ] 单元测试覆盖率 > 60%
+### 謇句勘豬玖ｯ・
+- **荳榊酔蜈臥・譚｡莉ｶ**・壼ｮ､蜀・∝ｮ､螟悶・・・
+- **荳榊酔隶ｾ螟・*・夐ｫ倡ｫｯ/荳ｭ遶ｯ/菴守ｫｯ隶ｾ螟・
+- **髟ｿ譌ｶ髣ｴ霑占｡・*・・蟆乗慮莉･荳顔噪遞ｳ螳壽ｧ豬玖ｯ・
+
+---
+
+## 鬪梧噺譬・㊥
+
+### Phase 1 鬪梧噺譬・㊥
+- [ ] 蠎皮畑蜿ｯ莉･豁｣蟶ｸ蜷ｯ蜉ｨ蟷ｶ譏ｾ遉ｺ隶｡謨ｰ逡碁擇
+- [ ] 鞫・ワ螟ｴ鬚・ｧ域ｭ｣蟶ｸ譏ｾ遉ｺ
+- [ ] 諡肴焔蜉ｨ菴懷庄莉･陲ｫ豁｣遑ｮ隶｡謨ｰ・亥㊥遑ｮ邇・> 80%・・
+- [ ] 隶｡謨ｰ扈捺棡蜿ｯ莉･菫晏ｭ伜芦譛ｬ蝨ｰ謨ｰ謐ｮ蠎・
+- [ ] 蜴・彰隶ｰ蠖暮｡ｵ髱｢蜿ｯ莉･譟･逵句ｷｲ菫晏ｭ倡噪莨夊ｯ・
+- [ ] 蠎皮畑蜿ｯ莉･遞ｳ螳夊ｿ占｡・30 蛻・帖莉･荳贋ｸ榊ｴｩ貅・
+
+### Phase 2 鬪梧噺譬・㊥
+- [ ] 謾ｯ謖∝､夂畑謌ｷ蛻・困
+- [ ] 髻ｳ鬚第｣豬句庄莉･豁｣遑ｮ隶｡謨ｰ・域牛謇・霍ｳ扈ｳ螢ｰ髻ｳ・・
+- [ ] 逕ｨ謌ｷ蜿ｯ莉･蠖募宛閾ｪ螳壻ｹ画ｷ譛ｬ蟷ｶ逕ｨ莠手ｮ｡謨ｰ
+- [ ] 髦亥ｼ隹・鰍螳樊慮逕滓譜
+- [ ] 謨ｰ謐ｮ蛻・梵鬘ｵ髱｢螻慕､ｺ豁｣遑ｮ逧・ｻ溯ｮ｡蝗ｾ陦ｨ
+- [ ] 謨ｰ謐ｮ蜿ｯ莉･蟇ｼ蜃ｺ荳ｺ JSON 蟷ｶ蟇ｼ蜈･諱｢螟・
+
+### Phase 3 鬪梧噺譬・㊥
+- [ ] TFLite 讓｡蝙句庄騾牙ｹｶ謠宣ｫ伜､肴揩蜉ｨ菴懆ｯ・悪邇・
+- [ ] 霑懃ｨ句､・ｻｽ謗･蜿｣鬚・蕗螳梧・
+- [ ] UI 蝨ｨ謇譛臥岼譬・ｮｾ螟・ｸ頑仞遉ｺ豁｣蟶ｸ
+- [ ] 菴守ｫｯ隶ｾ螟・ｿ占｡梧ｵ∫腐・亥ｸｧ邇・> 15fps・・
+- [ ] 蜊募・豬玖ｯ戊ｦ・尠邇・> 60%
