@@ -1,5 +1,6 @@
 package com.snuabar.counter.core.detection.tflite.action
 
+import com.snuabar.counter.domain.model.ActionType
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2

@@ -24,6 +24,8 @@ class VisionDetectionEngine @Inject constructor(
     private var isRunning = false
     private var isPaused = false
 
+    override fun isRunning(): Boolean = isRunning
+
     override fun start(config: DetectionConfig) {
         if (isRunning) return
         isRunning = true

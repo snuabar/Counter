@@ -1,5 +1,7 @@
 package com.snuabar.counter.core.detection.tflite.action
 
+import com.snuabar.counter.domain.model.ActionType
+
 /**
  * Pose action detection result
  */
@@ -11,13 +13,6 @@ data class PoseActionResult(
     val confidence: Float = 0f,
     val debugInfo: String = ""
 )
-
-enum class ActionType {
-    PUSH_UP,      // 俯卧撑
-    SQUAT,        // 深蹲
-    PLANK,        // 平板支撑
-    CUSTOM        // 用户自定义模板
-}
 
 enum class ActionState {
     IDLE,         // 等待开始

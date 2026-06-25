@@ -9,6 +9,7 @@ data class Template(
     val type: TemplateType,
     val sensorType: SensorType,
     val mode: SessionMode = SessionMode.COUNTING,
+    val actionType: ActionType? = null, // null means custom/timer-based
     val targetSeconds: Int? = null,
     val mediaPath: String? = null,
     val featureVector: ByteArray? = null,

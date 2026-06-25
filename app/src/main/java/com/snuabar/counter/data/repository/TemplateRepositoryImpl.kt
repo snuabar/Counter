@@ -2,6 +2,7 @@ package com.snuabar.counter.data.repository
 
 import com.snuabar.counter.data.local.db.dao.TemplateDao
 import com.snuabar.counter.data.local.db.entity.TemplateEntity
+import com.snuabar.counter.domain.model.ActionType
 import com.snuabar.counter.domain.model.SessionMode
 import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.Template
@@ -55,17 +56,19 @@ class TemplateRepositoryImpl @Inject constructor(
         if (existing.none { it.type == TemplateType.BUILTIN.name }) {
             val builtinTemplates = listOf(
                 TemplateEntity(
-                    name = "拍手",
+                    name = "俯卧撑",
                     type = TemplateType.BUILTIN.name,
                     sensorType = SensorType.VISION.name,
                     mode = SessionMode.COUNTING.name,
+                    actionType = ActionType.PUSH_UP.name,
                     threshold = 0.7f
                 ),
                 TemplateEntity(
-                    name = "跳绳",
+                    name = "深蹲",
                     type = TemplateType.BUILTIN.name,
                     sensorType = SensorType.VISION.name,
                     mode = SessionMode.COUNTING.name,
+                    actionType = ActionType.SQUAT.name,
                     threshold = 0.7f
                 ),
                 TemplateEntity(
@@ -73,6 +76,7 @@ class TemplateRepositoryImpl @Inject constructor(
                     type = TemplateType.BUILTIN.name,
                     sensorType = SensorType.VISION.name,
                     mode = SessionMode.TIMER.name,
+                    actionType = null,
                     targetSeconds = 60,
                     threshold = 0.7f
                 )
@@ -89,6 +93,7 @@ class TemplateRepositoryImpl @Inject constructor(
         type = type.name,
         sensorType = sensorType.name,
         mode = mode.name,
+        actionType = actionType?.name,
         targetSeconds = targetSeconds,
         mediaPath = mediaPath,
         featureVector = featureVector,
@@ -103,6 +108,7 @@ class TemplateRepositoryImpl @Inject constructor(
         type = TemplateType.valueOf(type),
         sensorType = SensorType.valueOf(sensorType),
         mode = SessionMode.valueOf(mode),
+        actionType = actionType?.let { ActionType.valueOf(it) },
         targetSeconds = targetSeconds,
         mediaPath = mediaPath,
         featureVector = featureVector,

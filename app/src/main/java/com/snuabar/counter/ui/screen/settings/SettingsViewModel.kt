@@ -3,8 +3,11 @@ package com.snuabar.counter.ui.screen.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.snuabar.counter.core.detection.tflite.PoseModelConfig
+import com.snuabar.counter.data.local.prefs.BackupPreferences
+import com.snuabar.counter.data.local.prefs.DetectionPreferences
 import com.snuabar.counter.data.local.prefs.ThemeMode
 import com.snuabar.counter.data.local.prefs.ThemePreferences
+import com.snuabar.counter.data.remote.WebDAVRemoteBackupDataSource
 import com.snuabar.counter.data.repository.BackupRepository
 import com.snuabar.counter.domain.model.User
 import com.snuabar.counter.domain.repository.UserRepository
@@ -19,7 +22,10 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val themePreferences: ThemePreferences,
-    private val backupRepository: BackupRepository
+    private val detectionPreferences: DetectionPreferences,
+    private val backupRepository: BackupRepository,
+    private val backupPreferences: BackupPreferences,
+    private val webDAVRemoteBackupDataSource: WebDAVRemoteBackupDataSource
 ) : ViewModel() {
 
     private val _currentUser = MutableStateFlow<User?>(null)
@@ -31,7 +37,27 @@ class SettingsViewModel @Inject constructor(
     private val _poseModelConfig = MutableStateFlow(PoseModelConfig.STANDARD)
     val poseModelConfig: StateFlow<PoseModelConfig> = _poseModelConfig.asStateFlow()
 
-    val themeMode: StateFlow<ThemeMode> = MutableStateFlow(ThemeMode.SYSTEM).asStateFlow()
+    private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    // WebDAV settings
+    private val _webDavBaseUrl = MutableStateFlow("")
+    val webDavBaseUrl: StateFlow<String> = _webDavBaseUrl.asStateFlow()
+
+    private val _webDavUsername = MutableStateFlow("")
+    val webDavUsername: StateFlow<String> = _webDavUsername.asStateFlow()
+
+    private val _webDavPassword = MutableStateFlow("")
+    val webDavPassword: StateFlow<String> = _webDavPassword.asStateFlow()
+
+    private val _isWebDavConnected = MutableStateFlow(false)
+    val isWebDavConnected: StateFlow<Boolean> = _isWebDavConnected.asStateFlow()
+
+    private val _isWebDavUploading = MutableStateFlow(false)
+    val isWebDavUploading: StateFlow<Boolean> = _isWebDavUploading.asStateFlow()
+
+    private val _webDavMessage = MutableStateFlow("")
+    val webDavMessage: StateFlow<String> = _webDavMessage.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -46,13 +72,41 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             themePreferences.themeMode.collect { mode ->
-                (themeMode as MutableStateFlow).value = mode
+                _themeMode.value = mode
+            }
+        }
+        viewModelScope.launch {
+            detectionPreferences.thresholdFlow.collect { value ->
+                _threshold.value = value
+            }
+        }
+        viewModelScope.launch {
+            detectionPreferences.poseModelConfigFlow.collect { config ->
+                _poseModelConfig.value = config
+            }
+        }
+        // Collect WebDAV preferences
+        viewModelScope.launch {
+            backupPreferences.baseUrlFlow.collect { url ->
+                _webDavBaseUrl.value = url
+            }
+        }
+        viewModelScope.launch {
+            backupPreferences.usernameFlow.collect { username ->
+                _webDavUsername.value = username
+            }
+        }
+        viewModelScope.launch {
+            backupPreferences.passwordFlow.collect { password ->
+                _webDavPassword.value = password
             }
         }
     }
 
     fun setThreshold(value: Float) {
-        _threshold.value = value.coerceIn(0.1f, 1.0f)
+        viewModelScope.launch {
+            detectionPreferences.setThreshold(value)
+        }
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -62,7 +116,9 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setPoseModelConfig(config: PoseModelConfig) {
-        _poseModelConfig.value = config
+        viewModelScope.launch {
+            detectionPreferences.setPoseModelConfig(config)
+        }
     }
 
     fun exportData(onResult: (String) -> Unit) {
@@ -75,6 +131,52 @@ class SettingsViewModel @Inject constructor(
     fun importData(jsonString: String) {
         viewModelScope.launch {
             backupRepository.importFromJson(jsonString)
+        }
+    }
+
+    // WebDAV methods
+    fun setWebDavConfig(baseUrl: String, username: String, password: String) {
+        viewModelScope.launch {
+            backupPreferences.setWebDavConfig(baseUrl, username, password)
+        }
+    }
+
+    fun testWebDavConnection() {
+        viewModelScope.launch {
+            val connected = webDAVRemoteBackupDataSource.testConnection()
+            _isWebDavConnected.value = connected
+            _webDavMessage.value = if (connected) "连接成功" else "连接失败，请检查配置"
+        }
+    }
+
+    fun uploadToWebDav() {
+        viewModelScope.launch {
+            _isWebDavUploading.value = true
+            try {
+                val json = backupRepository.exportToJson()
+                val success = webDAVRemoteBackupDataSource.upload(json, "counter_backup.json")
+                _webDavMessage.value = if (success) "上传备份成功" else "上传备份失败"
+            } catch (e: Exception) {
+                _webDavMessage.value = "上传备份失败: ${e.message}"
+            } finally {
+                _isWebDavUploading.value = false
+            }
+        }
+    }
+
+    fun restoreFromWebDav() {
+        viewModelScope.launch {
+            try {
+                val json = webDAVRemoteBackupDataSource.download("counter_backup.json")
+                if (json != null) {
+                    backupRepository.importFromJson(json)
+                    _webDavMessage.value = "从远程恢复成功"
+                } else {
+                    _webDavMessage.value = "从远程恢复失败：未找到备份文件"
+                }
+            } catch (e: Exception) {
+                _webDavMessage.value = "从远程恢复失败: ${e.message}"
+            }
         }
     }
 }

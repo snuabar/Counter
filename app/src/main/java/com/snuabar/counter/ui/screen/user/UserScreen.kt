@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import android.widget.Toast
 import com.snuabar.counter.core.biometric.BiometricAuthManager
 import com.snuabar.counter.domain.model.User
 import javax.inject.Inject
@@ -62,7 +63,7 @@ fun UserScreen(
                                 biometricAuth.authenticate(
                                     activity,
                                     onSuccess = { viewModel.switchUser(userId) },
-                                    onError = { /* TODO: show error */ }
+                                    onError = { Toast.makeText(context, "认证失败，请重试", Toast.LENGTH_SHORT).show() }
                                 )
                             } else {
                                 viewModel.switchUser(userId)

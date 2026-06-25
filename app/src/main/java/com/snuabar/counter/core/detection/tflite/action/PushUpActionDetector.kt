@@ -1,5 +1,6 @@
 package com.snuabar.counter.core.detection.tflite.action
 
+import com.snuabar.counter.domain.model.ActionType
 import kotlin.math.abs
 
 /**
@@ -18,9 +19,9 @@ import kotlin.math.abs
 class PushUpActionDetector : BasePoseActionDetector(ActionType.PUSH_UP) {
 
     // Thresholds for push-up detection
-    private val straightArmThreshold = 160f  // Arms considered straight above this angle
-    private val bentArmThreshold = 100f        // Arms considered bent below this angle
-    private val minConfidence = 0.5f
+    private val straightArmThreshold = 130f  // Arms considered straight above this angle
+    private val bentArmThreshold = 80f         // Arms considered bent below this threshold
+    private val minConfidence = 0.1f
 
     override fun detect(keypoints: Array<FloatArray>): PoseActionResult? {
         updateCooldown()
@@ -38,7 +39,7 @@ class PushUpActionDetector : BasePoseActionDetector(ActionType.PUSH_UP) {
             !isVisible(leftWrist, minConfidence) || !isVisible(rightShoulder, minConfidence) ||
             !isVisible(rightElbow, minConfidence) || !isVisible(rightWrist, minConfidence)
         ) {
-            return null // Not enough keypoints visible
+            return null
         }
 
         // Calculate elbow angles (shoulder -> elbow -> wrist)

@@ -45,6 +45,9 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            useLegacyPackaging = false
+        }
     }
 
     composeOptions {
@@ -105,12 +108,14 @@ dependencies {
     // Biometric
     implementation("androidx.biometric:biometric:1.1.0")
 
+    // OkHttp
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
     // Gson
     implementation("com.google.code.gson:gson:2.10.1")
 
-    // TensorFlow Lite (placeholder - model file required for full implementation)
-    implementation("org.tensorflow:tensorflow-lite:2.15.0")
-    implementation("org.tensorflow:tensorflow-lite-support:0.4.4")
+    // LiteRT (Google AI Edge) - replaces legacy TensorFlow Lite
+    implementation("com.google.ai.edge.litert:litert:1.0.1")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

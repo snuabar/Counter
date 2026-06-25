@@ -1,5 +1,7 @@
 package com.snuabar.counter.core.detection.tflite.action
 
+import com.snuabar.counter.domain.model.ActionType
+
 /**
  * Squat detector.
  *
@@ -18,7 +20,7 @@ class SquatActionDetector : BasePoseActionDetector(ActionType.SQUAT) {
     // Thresholds for squat detection
     private val straightLegThreshold = 170f  // Legs considered straight above this angle
     private val bentLegThreshold = 100f        // Legs considered bent below this angle
-    private val minConfidence = 0.5f
+    private val minConfidence = 0.1f
 
     override fun detect(keypoints: Array<FloatArray>): PoseActionResult? {
         updateCooldown()
