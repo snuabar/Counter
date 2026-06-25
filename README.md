@@ -21,9 +21,7 @@
 
 ## 项目文档
 
-- `docs/project-memory/PROGRESS.md` — 项目进度跟踪（迁移到新电脑后首先阅读）
-- `docs/superpowers/specs/2026-06-24-counter-app-plan.md` — 详细实现计划
-
-## ⚠️ 重要提示
-
-所有已实现功能均为**代码层面实现**，尚未在真机上进行测试验证。
+| 文件 | 说明 |
+|------|------|
+| `docs/project-memory/PROGRESS.md` | 项目进度跟踪（迁移到新电脑后首先阅读） |
+| `docs/superpowers/specs/2026-06-24-counter-app-plan.md` | 详细实现计划 |
