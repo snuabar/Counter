@@ -3,6 +3,10 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven {
+            url = uri("http://maven.aliyun.com/repository/public")
+            isAllowInsecureProtocol = true
+        }
     }
 }
 
@@ -11,6 +15,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("http://maven.aliyun.com/repository/public")
+            isAllowInsecureProtocol = true
+        }
     }
 }
 

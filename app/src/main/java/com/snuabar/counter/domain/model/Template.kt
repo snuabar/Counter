@@ -8,6 +8,8 @@ data class Template(
     val name: String,
     val type: TemplateType,
     val sensorType: SensorType,
+    val mode: SessionMode = SessionMode.COUNTING,
+    val targetSeconds: Int? = null,
     val mediaPath: String? = null,
     val featureVector: ByteArray? = null,
     val threshold: Float = 0.7f,

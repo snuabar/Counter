@@ -1,5 +1,6 @@
 package com.snuabar.counter.core.detection.audio
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFormat
 import android.media.AudioRecord
@@ -49,6 +50,7 @@ class AudioDetectionEngine @Inject constructor(
         startRecording()
     }
 
+    @SuppressLint("MissingPermission")
     private fun startRecording() {
         if (audioRecord != null) {
             audioRecord?.release()

@@ -55,7 +55,9 @@ class TemplateViewModel @Inject constructor(
     }
 
     fun deleteTemplate(templateId: Long) {
-        // TODO: implement delete
+        viewModelScope.launch {
+            templateRepository.deleteTemplate(templateId)
+        }
     }
 
     fun setShowAddTemplateDialog(show: Boolean) {

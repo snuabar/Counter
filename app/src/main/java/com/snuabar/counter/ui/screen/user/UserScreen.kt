@@ -1,6 +1,7 @@
 package com.snuabar.counter.ui.screen.user
 
 import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -54,7 +55,7 @@ fun UserScreen(
                     users = users,
                     currentUserId = currentUserId,
                     onSwitchUser = { userId ->
-                        val activity = context as? ComponentActivity
+                        val activity = context as? FragmentActivity
                         if (activity != null) {
                             val biometricAuth = BiometricAuthManager(activity)
                             if (biometricAuth.isAvailable()) {

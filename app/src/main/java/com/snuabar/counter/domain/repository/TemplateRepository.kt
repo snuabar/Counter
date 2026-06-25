@@ -10,4 +10,5 @@ interface TemplateRepository {
     fun getTemplatesByUserId(userId: Long): Flow<List<Template>>
     suspend fun getBuiltinTemplates(): List<Template>
     suspend fun ensureBuiltinTemplates()
+    suspend fun deleteTemplate(id: Long)
 }

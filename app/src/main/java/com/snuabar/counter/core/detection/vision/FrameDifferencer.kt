@@ -8,8 +8,13 @@ class FrameDifferencer {
     private var previousFrame: Mat? = null
 
     fun computeDifference(currentFrame: Mat): Double {
-        val gray = Mat()
-        Imgproc.cvtColor(currentFrame, gray, Imgproc.COLOR_RGB2GRAY)
+        val gray = if (currentFrame.channels() == 1) {
+            currentFrame.clone()
+        } else {
+            val g = Mat()
+            Imgproc.cvtColor(currentFrame, g, Imgproc.COLOR_RGB2GRAY)
+            g
+        }
 
         val diff = if (previousFrame != null) {
             val result = Mat()

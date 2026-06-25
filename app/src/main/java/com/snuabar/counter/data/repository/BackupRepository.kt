@@ -1,24 +1,23 @@
 package com.snuabar.counter.data.repository
 
 import android.content.Context
+import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.snuabar.counter.data.local.db.CounterDatabase
-import com.snuabar.counter.domain.model.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import java.io.File
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class BackupRepository @Inject constructor(
-    private val context: Context,
+    @ApplicationContext private val context: Context,
     private val database: CounterDatabase
 ) {
 
-    private val json = Json { prettyPrint = true }
+    private val gson = Gson()
 
     suspend fun exportToJson(): String = withContext(Dispatchers.IO) {
         val users = database.userDao().getAll().first()
@@ -44,11 +43,11 @@ class BackupRepository @Inject constructor(
             }
         )
 
-        json.encodeToString(backupData)
+        gson.toJson(backupData)
     }
 
     suspend fun importFromJson(jsonString: String) = withContext(Dispatchers.IO) {
-        val backupData = json.decodeFromString<BackupData>(jsonString)
+        val backupData = gson.fromJson(jsonString, BackupData::class.java)
 
         // Import users
         backupData.users.forEach {
@@ -97,54 +96,49 @@ class BackupRepository @Inject constructor(
         }
     }
 
-    @Serializable
     data class BackupData(
-        val users: List<BackupUser>,
-        val sessions: List<BackupSession>,
-        val events: List<BackupEvent>,
-        val templates: List<BackupTemplate>
+        @SerializedName("users") val users: List<BackupUser>,
+        @SerializedName("sessions") val sessions: List<BackupSession>,
+        @SerializedName("events") val events: List<BackupEvent>,
+        @SerializedName("templates") val templates: List<BackupTemplate>
     )
 
-    @Serializable
     data class BackupUser(
-        val id: Long,
-        val name: String,
-        val createdAt: Long,
-        val avatarPath: String?
+        @SerializedName("id") val id: Long,
+        @SerializedName("name") val name: String,
+        @SerializedName("createdAt") val createdAt: Long,
+        @SerializedName("avatarPath") val avatarPath: String?
     )
 
-    @Serializable
     data class BackupSession(
-        val id: Long,
-        val userId: Long,
-        val name: String,
-        val templateId: Long?,
-        val sensorType: String,
-        val startTime: Long,
-        val endTime: Long?,
-        val targetCount: Int?,
-        val finalCount: Int,
-        val status: String
+        @SerializedName("id") val id: Long,
+        @SerializedName("userId") val userId: Long,
+        @SerializedName("name") val name: String,
+        @SerializedName("templateId") val templateId: Long?,
+        @SerializedName("sensorType") val sensorType: String,
+        @SerializedName("startTime") val startTime: Long,
+        @SerializedName("endTime") val endTime: Long?,
+        @SerializedName("targetCount") val targetCount: Int?,
+        @SerializedName("finalCount") val finalCount: Int,
+        @SerializedName("status") val status: String
     )
 
-    @Serializable
     data class BackupEvent(
-        val id: Long,
-        val sessionId: Long,
-        val timestamp: Long,
-        val count: Int,
-        val confidence: Float
+        @SerializedName("id") val id: Long,
+        @SerializedName("sessionId") val sessionId: Long,
+        @SerializedName("timestamp") val timestamp: Long,
+        @SerializedName("count") val count: Int,
+        @SerializedName("confidence") val confidence: Float
     )
 
-    @Serializable
     data class BackupTemplate(
-        val id: Long,
-        val userId: Long?,
-        val name: String,
-        val type: String,
-        val sensorType: String,
-        val mediaPath: String?,
-        val threshold: Float,
-        val createdAt: Long
+        @SerializedName("id") val id: Long,
+        @SerializedName("userId") val userId: Long?,
+        @SerializedName("name") val name: String,
+        @SerializedName("type") val type: String,
+        @SerializedName("sensorType") val sensorType: String,
+        @SerializedName("mediaPath") val mediaPath: String?,
+        @SerializedName("threshold") val threshold: Float,
+        @SerializedName("createdAt") val createdAt: Long
     )
 }

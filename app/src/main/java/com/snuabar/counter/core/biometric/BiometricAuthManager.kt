@@ -9,9 +9,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Singleton
-class BiometricAuthManager @Inject constructor(
-    @ApplicationContext private val context: Context
+class BiometricAuthManager(
+    private val context: Context
 ) {
 
     private val biometricManager = BiometricManager.from(context)
@@ -37,7 +36,7 @@ class BiometricAuthManager @Inject constructor(
             activity,
             executor,
             object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: AuthenticationResult) {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                     super.onAuthenticationSucceeded(result)
                     onSuccess()
                 }

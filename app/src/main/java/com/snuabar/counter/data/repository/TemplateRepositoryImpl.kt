@@ -2,6 +2,7 @@ package com.snuabar.counter.data.repository
 
 import com.snuabar.counter.data.local.db.dao.TemplateDao
 import com.snuabar.counter.data.local.db.entity.TemplateEntity
+import com.snuabar.counter.domain.model.SessionMode
 import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.Template
 import com.snuabar.counter.domain.model.TemplateType
@@ -45,6 +46,10 @@ class TemplateRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun deleteTemplate(id: Long) {
+        templateDao.delete(id)
+    }
+
     override suspend fun ensureBuiltinTemplates() {
         val existing = templateDao.getAll().first()
         if (existing.none { it.type == TemplateType.BUILTIN.name }) {
@@ -53,12 +58,22 @@ class TemplateRepositoryImpl @Inject constructor(
                     name = "拍手",
                     type = TemplateType.BUILTIN.name,
                     sensorType = SensorType.VISION.name,
+                    mode = SessionMode.COUNTING.name,
                     threshold = 0.7f
                 ),
                 TemplateEntity(
                     name = "跳绳",
                     type = TemplateType.BUILTIN.name,
                     sensorType = SensorType.VISION.name,
+                    mode = SessionMode.COUNTING.name,
+                    threshold = 0.7f
+                ),
+                TemplateEntity(
+                    name = "平板支撑",
+                    type = TemplateType.BUILTIN.name,
+                    sensorType = SensorType.VISION.name,
+                    mode = SessionMode.TIMER.name,
+                    targetSeconds = 60,
                     threshold = 0.7f
                 )
             )
@@ -73,6 +88,8 @@ class TemplateRepositoryImpl @Inject constructor(
         name = name,
         type = type.name,
         sensorType = sensorType.name,
+        mode = mode.name,
+        targetSeconds = targetSeconds,
         mediaPath = mediaPath,
         featureVector = featureVector,
         threshold = threshold,
@@ -85,6 +102,8 @@ class TemplateRepositoryImpl @Inject constructor(
         name = name,
         type = TemplateType.valueOf(type),
         sensorType = SensorType.valueOf(sensorType),
+        mode = SessionMode.valueOf(mode),
+        targetSeconds = targetSeconds,
         mediaPath = mediaPath,
         featureVector = featureVector,
         threshold = threshold,

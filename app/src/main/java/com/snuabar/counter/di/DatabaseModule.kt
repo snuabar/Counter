@@ -21,7 +21,7 @@ object DatabaseModule {
             context,
             CounterDatabase::class.java,
             "counter_database"
-        ).build()
+        ).fallbackToDestructiveMigration().build()
     }
 
     @Provides

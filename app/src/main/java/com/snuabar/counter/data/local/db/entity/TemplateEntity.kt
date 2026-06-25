@@ -11,6 +11,8 @@ data class TemplateEntity(
     val name: String,
     val type: String, // BUILTIN or CUSTOM
     val sensorType: String, // VISION or AUDIO
+    val mode: String = "COUNTING", // COUNTING or TIMER
+    val targetSeconds: Int? = null, // 计时模式的目标秒数
     val mediaPath: String? = null,
     val featureVector: ByteArray? = null,
     val threshold: Float = 0.7f,

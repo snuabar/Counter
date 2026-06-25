@@ -2,6 +2,7 @@ package com.snuabar.counter.ui.screen.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.snuabar.counter.core.detection.tflite.PoseModelConfig
 import com.snuabar.counter.data.local.prefs.ThemeMode
 import com.snuabar.counter.data.local.prefs.ThemePreferences
 import com.snuabar.counter.data.repository.BackupRepository
@@ -26,6 +27,9 @@ class SettingsViewModel @Inject constructor(
 
     private val _threshold = MutableStateFlow(0.7f)
     val threshold: StateFlow<Float> = _threshold.asStateFlow()
+
+    private val _poseModelConfig = MutableStateFlow(PoseModelConfig.STANDARD)
+    val poseModelConfig: StateFlow<PoseModelConfig> = _poseModelConfig.asStateFlow()
 
     val themeMode: StateFlow<ThemeMode> = MutableStateFlow(ThemeMode.SYSTEM).asStateFlow()
 
@@ -57,12 +61,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun exportData(): String {
-        var result = ""
+    fun setPoseModelConfig(config: PoseModelConfig) {
+        _poseModelConfig.value = config
+    }
+
+    fun exportData(onResult: (String) -> Unit) {
         viewModelScope.launch {
-            result = backupRepository.exportToJson()
+            val result = backupRepository.exportToJson()
+            onResult(result)
         }
-        return result
     }
 
     fun importData(jsonString: String) {

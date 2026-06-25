@@ -1,0 +1,16 @@
+package com.snuabar.counter.domain.model
+
+data class SessionStatistics(
+    val totalSessions: Int = 0,
+    val totalCount: Int = 0,
+    val totalDurationMs: Long = 0,
+    val avgCountPerSession: Double = 0.0,
+    val dailyStats: List<DailyStat> = emptyList(),
+    val sensorTypeDistribution: Map<SensorType, Int> = emptyMap()
+)
+
+data class DailyStat(
+    val dateLabel: String,
+    val count: Int,
+    val sessions: Int
+)
