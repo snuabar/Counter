@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.snuabar.counter.core.detection.*
 import com.snuabar.counter.core.detection.tflite.PoseModelConfig
+import com.snuabar.counter.core.detection.tflite.action.DetectionDebugInfo
 import com.snuabar.counter.domain.model.ActionType
 import com.snuabar.counter.core.service.TimerService
 import com.snuabar.counter.core.service.TimerStateHolder
@@ -27,6 +28,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 @HiltViewModel
@@ -73,7 +75,7 @@ class CountingViewModel @Inject constructor(
     private val _targetResolution = MutableStateFlow(android.util.Size(640, 480))
     val targetResolution: StateFlow<android.util.Size> = _targetResolution.asStateFlow()
 
-    private val _actionType = MutableStateFlow(ActionType.PUSH_UP)
+    private val _actionType = MutableStateFlow(ActionType.CUSTOM)
     val actionType: StateFlow<ActionType> = _actionType.asStateFlow()
 
     // Template selection
@@ -87,7 +89,9 @@ class CountingViewModel @Inject constructor(
     private val _targetCount = MutableStateFlow<Int?>(null)
     val targetCount: StateFlow<Int?> = _targetCount.asStateFlow()
 
-    // Session mode (COUNTING or TIMER)
+    // Debug info from action detector
+    private val _debugInfo = MutableStateFlow<DetectionDebugInfo?>(null)
+    val debugInfo: StateFlow<DetectionDebugInfo?> = _debugInfo.asStateFlow()
     private val _sessionMode = MutableStateFlow(SessionMode.COUNTING)
     val sessionMode: StateFlow<SessionMode> = _sessionMode.asStateFlow()
 
@@ -110,10 +114,15 @@ class CountingViewModel @Inject constructor(
         // Load templates and auto-select the first one
         viewModelScope.launch {
             templateRepository.getAllTemplates().collect { templateList ->
-                _templates.value = templateList
+                // Filter out templates without feature vectors (not yet recorded)
+                val recordedTemplates = templateList.filter {
+                    it.featureVector != null && it.featureVector.isNotEmpty()
+                }
+                android.util.Log.d("CountingViewModel", "Loaded ${templateList.size} templates, ${recordedTemplates.size} have feature vectors")
+                _templates.value = recordedTemplates
                 // Auto-select first template if none selected
-                if (templateList.isNotEmpty() && _selectedTemplate.value == null) {
-                    selectTemplate(templateList.first())
+                if (recordedTemplates.isNotEmpty() && _selectedTemplate.value == null) {
+                    selectTemplate(recordedTemplates.first())
                 }
             }
         }
@@ -273,6 +282,7 @@ class CountingViewModel @Inject constructor(
             currentEngine?.countEvents?.collect { event ->
                 _currentCount.value = event.count
                 _confidence.value = event.confidence
+                event.debugInfo?.let { _debugInfo.value = it }
             }
         }
 
@@ -384,6 +394,7 @@ class CountingViewModel @Inject constructor(
                 currentEngine?.countEvents?.collect { event ->
                     _currentCount.value = event.count
                     _confidence.value = event.confidence
+                    event.debugInfo?.let { _debugInfo.value = it }
                 }
             }
         }
@@ -407,7 +418,7 @@ class CountingViewModel @Inject constructor(
         mode: SessionMode? = null,
         targetSeconds: Int? = null,
         targetResolution: android.util.Size = android.util.Size(640, 480),
-        actionType: ActionType = ActionType.PUSH_UP,
+        actionType: ActionType = ActionType.CUSTOM,
         templateId: Long? = null
     ) {
         // Use internal state if not explicitly provided
@@ -452,7 +463,10 @@ class CountingViewModel @Inject constructor(
 
         if (actualMode == SessionMode.TIMER) {
             // Timer is handled by TimerService for background support
-            TimerService.startTimer(appContext, actualTargetSeconds)
+            viewModelScope.launch {
+                val voiceEnabled = detectionPreferences.voiceAnnouncementFlow.first()
+                TimerService.startTimer(appContext, actualTargetSeconds, voiceEnabled)
+            }
             startTimerService()
         }
 
@@ -461,6 +475,15 @@ class CountingViewModel @Inject constructor(
             var resolvedTemplate: com.snuabar.counter.domain.model.Template? = null
             if (actualTemplateId != null) {
                 resolvedTemplate = templateRepository.getTemplate(actualTemplateId)
+                if (resolvedTemplate != null) {
+                    val fvSize = resolvedTemplate.featureVector?.size ?: 0
+                    android.util.Log.d("CountingViewModel", "Resolved template id=$actualTemplateId, name=${resolvedTemplate.name}, featureVector size=$fvSize")
+                    if (fvSize == 0) {
+                        android.util.Log.e("CountingViewModel", "WARNING: Template ${resolvedTemplate.name} has empty feature vector!")
+                    }
+                } else {
+                    android.util.Log.e("CountingViewModel", "WARNING: Could not resolve template id=$actualTemplateId")
+                }
             }
 
             currentEngine?.start(

@@ -10,17 +10,21 @@ import android.content.Intent
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.speech.tts.TextToSpeech
 import androidx.core.app.NotificationCompat
 import com.snuabar.counter.CounterApplication
 import com.snuabar.counter.MainActivity
 import com.snuabar.counter.R
 import kotlinx.coroutines.*
+import java.util.Locale
 
 /**
  * Foreground service for timer mode (e.g. plank hold).
  * Keeps counting elapsed time even when the app is in background or screen is locked.
  */
-class TimerService : Service() {
+class TimerService : Service(), TextToSpeech.OnInitListener {
 
     private val binder = TimerBinder()
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -32,6 +36,10 @@ class TimerService : Service() {
     private var targetSeconds: Int? = null
     private var onTargetReached: (() -> Unit)? = null
 
+    private var textToSpeech: TextToSpeech? = null
+    private var ttsInitialized = false
+    private var voiceAnnouncement = false
+
     inner class TimerBinder : Binder() {
         fun getService(): TimerService = this@TimerService
     }
@@ -41,11 +49,21 @@ class TimerService : Service() {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        textToSpeech = TextToSpeech(this, this)
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = textToSpeech?.setLanguage(Locale.getDefault())
+            ttsInitialized = result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Always call startForeground to satisfy Android 12+ 5-second requirement
         startForeground(NOTIFICATION_ID, buildNotification(timerStateHolder.elapsedSeconds.value))
+
+        voiceAnnouncement = intent?.getBooleanExtra(EXTRA_VOICE_ANNOUNCEMENT, false) ?: false
 
         when (intent?.action) {
             ACTION_START -> {
@@ -74,10 +92,16 @@ class TimerService : Service() {
                     timerStateHolder.updateElapsed(newElapsed)
                     updateNotification(newElapsed)
 
+                    // Voice announcement every 30 seconds
+                    if (voiceAnnouncement && newElapsed % 30 == 0 && newElapsed > 0) {
+                        speakElapsedTime(newElapsed)
+                    }
+
                     // Check target
                     targetSeconds?.let { target ->
                         if (newElapsed >= target) {
                             onTargetReached?.invoke()
+                            notifyTargetReached()
                             stopTimer()
                         }
                     }
@@ -198,9 +222,62 @@ class TimerService : Service() {
         }
     }
 
+    private fun speakElapsedTime(seconds: Int) {
+        if (!ttsInitialized) return
+        val minutes = seconds / 60
+        val secs = seconds % 60
+        val text = if (minutes > 0) {
+            "$minutes 分 $secs 秒"
+        } else {
+            "$secs 秒"
+        }
+        speak(text)
+    }
+
+    private fun speak(text: String) {
+        if (!ttsInitialized || textToSpeech == null) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
+        } else {
+            @Suppress("DEPRECATION")
+            textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null)
+        }
+    }
+
+    private fun notifyTargetReached() {
+        // Send high-priority notification with sound
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("目标时间到达！")
+            .setContentText("计时已完成")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID + 1, notification)
+
+        // Vibrate
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 500, 200, 500), -1))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(longArrayOf(0, 500, 200, 500), -1)
+        }
+
+        // Speak target reached
+        if (voiceAnnouncement) {
+            speak("目标时间到达")
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
     }
 
     companion object {
@@ -209,13 +286,15 @@ class TimerService : Service() {
         const val ACTION_RESUME = "com.snuabar.counter.action.RESUME_TIMER"
         const val ACTION_STOP = "com.snuabar.counter.action.STOP_TIMER"
         const val EXTRA_TARGET_SECONDS = "target_seconds"
+        const val EXTRA_VOICE_ANNOUNCEMENT = "voice_announcement"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "timer_service_channel"
 
-        fun startTimer(context: Context, targetSeconds: Int? = null) {
+        fun startTimer(context: Context, targetSeconds: Int? = null, voiceAnnouncement: Boolean = false) {
             val intent = Intent(context, TimerService::class.java).apply {
                 action = ACTION_START
                 targetSeconds?.let { putExtra(EXTRA_TARGET_SECONDS, it) }
+                putExtra(EXTRA_VOICE_ANNOUNCEMENT, voiceAnnouncement)
             }
             context.startForegroundService(intent)
         }

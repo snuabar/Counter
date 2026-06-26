@@ -6,6 +6,8 @@ import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.SessionMode
 import kotlinx.coroutines.flow.Flow
 
+import com.snuabar.counter.core.detection.tflite.action.DetectionDebugInfo
+
 interface DetectionEngine {
     fun start(config: DetectionConfig)
     fun pause()
@@ -28,7 +30,7 @@ data class DetectionConfig(
     val targetSeconds: Int? = null,
     val targetResolution: android.util.Size = android.util.Size(640, 480),
     val poseModelConfig: PoseModelConfig = PoseModelConfig.STANDARD,
-    val actionType: ActionType = ActionType.PUSH_UP,
+    val actionType: ActionType = ActionType.CUSTOM,
     val template: com.snuabar.counter.domain.model.Template? = null
 )
 
@@ -37,5 +39,6 @@ enum class EngineType { OPEN_CV, TFLITE }
 data class CountEvent(
     val timestamp: Long = System.currentTimeMillis(),
     val count: Int,
-    val confidence: Float
+    val confidence: Float,
+    val debugInfo: DetectionDebugInfo? = null
 )

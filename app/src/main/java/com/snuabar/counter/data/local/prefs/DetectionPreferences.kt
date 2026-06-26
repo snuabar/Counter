@@ -1,6 +1,7 @@
 package com.snuabar.counter.data.local.prefs
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -23,6 +24,7 @@ class DetectionPreferences @Inject constructor(
     companion object {
         val THRESHOLD = floatPreferencesKey("threshold")
         val POSE_MODEL_CONFIG = stringPreferencesKey("pose_model_config")
+        val VOICE_ANNOUNCEMENT = booleanPreferencesKey("voice_announcement")
     }
 
     val thresholdFlow: Flow<Float> = dataStore.data
@@ -45,6 +47,17 @@ class DetectionPreferences @Inject constructor(
     suspend fun setPoseModelConfig(config: PoseModelConfig) {
         dataStore.edit { preferences ->
             preferences[POSE_MODEL_CONFIG] = config.name
+        }
+    }
+
+    val voiceAnnouncementFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[VOICE_ANNOUNCEMENT] ?: false
+        }
+
+    suspend fun setVoiceAnnouncement(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[VOICE_ANNOUNCEMENT] = enabled
         }
     }
 }

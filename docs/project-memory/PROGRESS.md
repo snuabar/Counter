@@ -2,7 +2,7 @@
 
 > **用途：** 本文件用于在多台开发电脑之间同步项目状态。当在新电脑上打开项目时，首先阅读此文件以了解当前进度。
 >
-> **最后更新：** 2026-06-25（会话2）
+> **最后更新：** 2026-06-25（会话3）
 
 > ⚠️ **部分功能待验证：** 音频检测引擎、模板匹配算法尚未在真机上充分测试。TFLite 姿态检测、动作识别、前后摄像头骨架显示已通过真机验证。
 
@@ -175,6 +175,9 @@ app/src/main/java/com/snuabar/counter/
 | 30 | 架构重构 | ✅ | ActionType→domain.model，SensorType统一，Template+actionType，DB v3 |
 | 31 | TimerService 崩溃修复 | ✅ | Android 12+ 前台服务 5 秒规则修复 |
 | 32 | 模板选择交互优化 | ✅ | 模板必选，自动选择首个，目标值可调 |
+| 33 | 预览组件统一 | ✅ | PoseCameraPreview 统一封装 Camera2 预览 + 骨架绘制 + 摄像头切换 + 权限检查 |
+| 34 | 摄像头切换标配化 | ✅ | CountingScreen 和 TemplateScreen 共用同一套摄像头切换 UI |
+| 35 | 权限内聚化 | ✅ | 相机权限检查移入 PoseCameraPreview，Screen 无需关心权限逻辑 |
 
 ---
 
@@ -220,6 +223,8 @@ app/src/main/java/com/snuabar/counter/
 | 2026-06-25 | PLANK 从 ActionType 移除 | 计时型活动通过 SessionMode.TIMER + 内置模板实现，不占用 ActionType |
 | 2026-06-25 | 模板为必选项 | 移除"不使用模板"选项，自动选择第一个模板，未选模板时禁用开始按钮 |
 | 2026-06-25 | Camera2 替代 CameraX 用于计数 | 计数界面改用 Camera2 实现更高帧率和更精确控制，模板录制仍用 CameraX |
+| 2026-06-25 | PoseCameraPreview 统一组件 | 将 Camera2 预览、骨架绘制、摄像头切换、权限检查统一封装到单一组件，CountingScreen 和 TemplateScreen 复用 |
+| 2026-06-25 | 摄像头切换作为预览标配 | 所有使用相机预览的页面统一支持摄像头切换（下拉菜单/单按钮），无需重复实现 |
 
 ---
 
@@ -276,6 +281,7 @@ app/src/main/java/com/snuabar/counter/
 | 4 | ~~TimerService 前台服务崩溃~~ | ✅ 已修复 | onStartCommand 开头统一调用 startForeground() 满足 Android 12+ 5秒规则 |
 | 5 | ~~架构设计 ActionType/Template 重复~~ | ✅ 已修复 | ActionType 整合到 Template，移除硬编码选择器 |
 | 6 | `ImageAnalysis.Builder.setTargetResolution()` 已弃用 | 编译警告 | 不影响功能，后续可迁移到 `setResolutionSelector()` |
+| 7 | PoseCameraPreview x轴镜像逻辑冗余 | 功能正常 | `toScreen` 中 x 轴两个分支结果相同，待确认是否简化 |
 
 ---
 

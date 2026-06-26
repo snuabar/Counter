@@ -39,6 +39,7 @@ fun SettingsScreen(
     val threshold by viewModel.threshold.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val poseModelConfig by viewModel.poseModelConfig.collectAsState()
+    val voiceAnnouncement by viewModel.voiceAnnouncement.collectAsState()
     val webDavBaseUrl by viewModel.webDavBaseUrl.collectAsState()
     val webDavUsername by viewModel.webDavUsername.collectAsState()
     val webDavPassword by viewModel.webDavPassword.collectAsState()
@@ -197,6 +198,36 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Voice announcement setting
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.setVoiceAnnouncement(!voiceAnnouncement) }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "语音播报",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "计时模式下每30秒播报一次时间",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                    Switch(
+                        checked = voiceAnnouncement,
+                        onCheckedChange = { viewModel.setVoiceAnnouncement(it) }
+                    )
                 }
             }
 

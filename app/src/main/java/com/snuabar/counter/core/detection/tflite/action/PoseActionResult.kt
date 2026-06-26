@@ -3,6 +3,20 @@ package com.snuabar.counter.core.detection.tflite.action
 import com.snuabar.counter.domain.model.ActionType
 
 /**
+ * Debug information for pose action detection.
+ */
+data class DetectionDebugInfo(
+    val currentAngle: Float = 0f,
+    val straightThreshold: Float = 0f,
+    val bentThreshold: Float = 0f,
+    val state: ActionState = ActionState.IDLE,
+    val cooldownCounter: Int = 0,
+    val cooldownFrames: Int = 0,
+    val confidence: Float = 0f,
+    val message: String = ""
+)
+
+/**
  * Pose action detection result
  */
 data class PoseActionResult(
@@ -11,7 +25,8 @@ data class PoseActionResult(
     val currentState: ActionState,
     val count: Int,
     val confidence: Float = 0f,
-    val debugInfo: String = ""
+    val debugInfo: String = "",
+    val structuredDebugInfo: DetectionDebugInfo = DetectionDebugInfo()
 )
 
 enum class ActionState {

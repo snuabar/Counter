@@ -1,19 +1,23 @@
 package com.snuabar.counter.ui.screen.template
 
 import android.content.Context
-import androidx.camera.core.ImageAnalysis
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.snuabar.counter.core.detection.*
 import com.snuabar.counter.core.template.RecordingSession
 import com.snuabar.counter.core.template.TemplateRecorder
 import com.snuabar.counter.domain.model.SensorType
+import com.snuabar.counter.domain.model.SessionMode
 import com.snuabar.counter.domain.model.Template
 import com.snuabar.counter.domain.model.TemplateType
 import com.snuabar.counter.domain.repository.TemplateRepository
 import com.snuabar.counter.domain.repository.UserRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -39,9 +43,18 @@ class TemplateViewModel @Inject constructor(
     private val _selectedSensorType = MutableStateFlow(SensorType.VISION)
     val selectedSensorType: StateFlow<SensorType> = _selectedSensorType.asStateFlow()
 
+    private val _selectedSessionMode = MutableStateFlow(SessionMode.COUNTING)
+    val selectedSessionMode: StateFlow<SessionMode> = _selectedSessionMode.asStateFlow()
+
     // Recording state
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
+
+    private val _isCountingDown = MutableStateFlow(false)
+    val isCountingDown: StateFlow<Boolean> = _isCountingDown.asStateFlow()
+
+    private val _countdownSeconds = MutableStateFlow(5)
+    val countdownSeconds: StateFlow<Int> = _countdownSeconds.asStateFlow()
 
     private val _recordProgress = MutableStateFlow(0)
     val recordProgress: StateFlow<Int> = _recordProgress.asStateFlow()
@@ -61,24 +74,56 @@ class TemplateViewModel @Inject constructor(
     // TemplateRecorder instance for active recording
     private var templateRecorder: TemplateRecorder? = null
     private var recordingTemplateId: Long? = null
+    private var countdownJob: kotlinx.coroutines.Job? = null
+
+    // Camera state (default front for recording so user can see themselves)
+    private val _isFrontCamera = MutableStateFlow(true)
+    val isFrontCamera: StateFlow<Boolean> = _isFrontCamera.asStateFlow()
+
+    private val _selectedCameraId = MutableStateFlow<String?>(null)
+    val selectedCameraId: StateFlow<String?> = _selectedCameraId.asStateFlow()
+
+    private val _availableCameras = MutableStateFlow<Map<String, String>>(emptyMap())
+    val availableCameras: StateFlow<Map<String, String>> = _availableCameras.asStateFlow()
 
     init {
         viewModelScope.launch {
-            templateRepository.ensureBuiltinTemplates()
             templateRepository.getAllTemplates().collect { list ->
                 _templates.value = list
             }
         }
+
+        // Enumerate available cameras
+        viewModelScope.launch {
+            try {
+                val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                val cameraInfo = mutableMapOf<String, String>()
+                for (cameraId in cameraManager.cameraIdList) {
+                    val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                    val lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                    val facingStr = when (lensFacing) {
+                        CameraCharacteristics.LENS_FACING_BACK -> "后置"
+                        CameraCharacteristics.LENS_FACING_FRONT -> "前置"
+                        else -> "未知"
+                    }
+                    cameraInfo[cameraId] = "$facingStr 摄像头 [$cameraId]"
+                }
+                _availableCameras.value = cameraInfo
+            } catch (e: Exception) {
+                Log.e("TemplateViewModel", "Camera enumeration failed", e)
+            }
+        }
     }
 
-    fun createTemplate(name: String, sensorType: SensorType) {
+    fun createTemplate(name: String, sensorType: SensorType, mode: SessionMode = SessionMode.COUNTING) {
         viewModelScope.launch {
             val userId = userRepository.currentUserId.first()
             val template = Template(
                 userId = userId,
                 name = name,
                 type = TemplateType.CUSTOM,
-                sensorType = sensorType
+                sensorType = sensorType,
+                mode = mode
             )
             templateRepository.createTemplate(template)
             _showAddTemplateDialog.value = false
@@ -104,6 +149,21 @@ class TemplateViewModel @Inject constructor(
         _selectedSensorType.value = sensorType
     }
 
+    fun setSelectedSessionMode(mode: SessionMode) {
+        _selectedSessionMode.value = mode
+    }
+
+    // ---- Camera methods ----
+
+    fun toggleCamera() {
+        _isFrontCamera.value = !_isFrontCamera.value
+        _selectedCameraId.value = null
+    }
+
+    fun selectCamera(cameraId: String?) {
+        _selectedCameraId.value = cameraId
+    }
+
     // ---- Recording methods ----
 
     /**
@@ -125,23 +185,14 @@ class TemplateViewModel @Inject constructor(
     }
 
     private fun startRecordingInternal(templateName: String, durationSeconds: Int) {
-        val recorder = TemplateRecorder()
-        recorder.onProgressUpdate = { current, target ->
-            _recordProgress.value = current
-            _recordTargetFrames.value = target
-        }
-        recorder.startRecording(durationSeconds)
-        templateRecorder = recorder
-
-        // Start TFLite detection engine to process camera frames
+        // Start TFLite engine for pose inference first (so user can see themselves during countdown)
         recordingEngine = detectionEngineFactory.create(SensorType.VISION, EngineType.TFLITE)
         val tfliteEngine = recordingEngine as? com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine
         tfliteEngine?.let { engine ->
-            engine.start(DetectionConfig(
+            engine.startPreview(DetectionConfig(
                 sensorType = SensorType.VISION,
                 threshold = 0.7f,
-                mode = com.snuabar.counter.domain.model.SessionMode.COUNTING,
-                actionType = com.snuabar.counter.domain.model.ActionType.CUSTOM
+                mode = SessionMode.COUNTING
             ))
             viewModelScope.launch {
                 engine.keypoints.collect { kps ->
@@ -159,13 +210,37 @@ class TemplateViewModel @Inject constructor(
         _isRecording.value = true
         _recordProgress.value = 0
         _recordTargetFrames.value = durationSeconds * 10
+
+        // Start 5-second countdown before actual recording
+        _isCountingDown.value = true
+        _countdownSeconds.value = 5
+
+        countdownJob = viewModelScope.launch {
+            for (i in 5 downTo 1) {
+                _countdownSeconds.value = i
+                delay(1000L)
+            }
+            _isCountingDown.value = false
+            _countdownSeconds.value = 0
+
+            // Now start actual recording
+            val recorder = TemplateRecorder()
+            recorder.onProgressUpdate = { current, target ->
+                _recordProgress.value = current
+                _recordTargetFrames.value = target
+            }
+            recorder.startRecording(durationSeconds)
+            templateRecorder = recorder
+        }
     }
 
     /**
-     * Get the image analyzer for camera integration.
+     * Process a bitmap from Camera2 (called on camera thread).
      */
-    fun getImageAnalyzer(): ImageAnalysis.Analyzer? {
-        return recordingEngine as? ImageAnalysis.Analyzer
+    fun processBitmap(bitmap: android.graphics.Bitmap) {
+        (recordingEngine as? com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine)?.let { engine ->
+            engine.processBitmap(bitmap)
+        }
     }
 
     /**
@@ -178,43 +253,50 @@ class TemplateViewModel @Inject constructor(
     /**
      * Stop recording and save the template.
      */
-    fun stopRecording(onSuccess: (Template) -> Unit, onFailure: () -> Unit) {
+    fun stopRecording(onSuccess: (Template) -> Unit, onFailure: (String) -> Unit) {
         recordingSession.clearCallback()
         recordingEngine?.stop()
         recordingEngine = null
         _keypoints.value = null
         val recorder = templateRecorder ?: run {
-            onFailure()
+            onFailure("录制失败")
             return
         }
         val templateName = _recordingTemplateName.value
         val existingId = recordingTemplateId
         viewModelScope.launch {
             val userId = userRepository.currentUserId.first()
-            val template = recorder.stopAndBuildTemplate(
-                name = templateName,
-                userId = userId
-            )
-            if (template != null) {
-                if (existingId != null) {
-                    // Update existing template with feature vector
-                    val existing = templateRepository.getTemplate(existingId)
-                    if (existing != null) {
-                        val updated = existing.copy(featureVector = template.featureVector)
-                        templateRepository.createTemplate(updated)
+            try {
+                val template = recorder.stopAndBuildTemplate(
+                    name = templateName,
+                    userId = userId
+                )
+                if (template != null) {
+                    if (existingId != null) {
+                        // Update existing template with feature vector
+                        val existing = templateRepository.getTemplate(existingId)
+                        if (existing != null) {
+                            val updated = existing.copy(featureVector = template.featureVector)
+                            templateRepository.createTemplate(updated)
+                        }
+                    } else {
+                        templateRepository.createTemplate(template)
                     }
+                    _isRecording.value = false
+                    templateRecorder = null
+                    recordingTemplateId = null
+                    onSuccess(template)
                 } else {
-                    templateRepository.createTemplate(template)
+                    _isRecording.value = false
+                    templateRecorder = null
+                    recordingTemplateId = null
+                    onFailure("录制失败：未收集到足够的帧")
                 }
+            } catch (e: TemplateRecorder.InsufficientMotionException) {
                 _isRecording.value = false
                 templateRecorder = null
                 recordingTemplateId = null
-                onSuccess(template)
-            } else {
-                _isRecording.value = false
-                templateRecorder = null
-                recordingTemplateId = null
-                onFailure()
+                onFailure(e.message ?: "动作幅度太小，请重新录制")
             }
         }
     }
@@ -223,6 +305,8 @@ class TemplateViewModel @Inject constructor(
      * Cancel the current recording session.
      */
     fun cancelRecording() {
+        countdownJob?.cancel()
+        countdownJob = null
         recordingSession.clearCallback()
         recordingEngine?.stop()
         recordingEngine = null
@@ -230,6 +314,8 @@ class TemplateViewModel @Inject constructor(
         templateRecorder?.cancelRecording()
         templateRecorder = null
         _isRecording.value = false
+        _isCountingDown.value = false
+        _countdownSeconds.value = 5
         _recordProgress.value = 0
         _recordTargetFrames.value = 0
         _recordingTemplateName.value = ""

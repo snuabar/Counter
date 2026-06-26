@@ -40,6 +40,9 @@ class SettingsViewModel @Inject constructor(
     private val _themeMode = MutableStateFlow(ThemeMode.SYSTEM)
     val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
 
+    private val _voiceAnnouncement = MutableStateFlow(false)
+    val voiceAnnouncement: StateFlow<Boolean> = _voiceAnnouncement.asStateFlow()
+
     // WebDAV settings
     private val _webDavBaseUrl = MutableStateFlow("")
     val webDavBaseUrl: StateFlow<String> = _webDavBaseUrl.asStateFlow()
@@ -101,6 +104,11 @@ class SettingsViewModel @Inject constructor(
                 _webDavPassword.value = password
             }
         }
+        viewModelScope.launch {
+            detectionPreferences.voiceAnnouncementFlow.collect { enabled ->
+                _voiceAnnouncement.value = enabled
+            }
+        }
     }
 
     fun setThreshold(value: Float) {
@@ -118,6 +126,12 @@ class SettingsViewModel @Inject constructor(
     fun setPoseModelConfig(config: PoseModelConfig) {
         viewModelScope.launch {
             detectionPreferences.setPoseModelConfig(config)
+        }
+    }
+
+    fun setVoiceAnnouncement(enabled: Boolean) {
+        viewModelScope.launch {
+            detectionPreferences.setVoiceAnnouncement(enabled)
         }
     }
 
