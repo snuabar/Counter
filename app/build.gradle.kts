@@ -117,6 +117,9 @@ dependencies {
     // LiteRT (Google AI Edge) - replaces legacy TensorFlow Lite
     implementation("com.google.ai.edge.litert:litert:1.0.1")
 
+    // MediaPipe Tasks Vision - Pose Landmarker (includes pose detection + landmark detection)
+    implementation("com.google.mediapipe:tasks-vision:0.10.29")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

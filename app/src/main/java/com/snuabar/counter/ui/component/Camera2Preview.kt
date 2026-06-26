@@ -81,16 +81,28 @@ fun Camera2Preview(
         val analysisThread = HandlerThread("AnalysisThread").apply { start() }
         val analysisHandler = Handler(analysisThread.looper)
 
-        // ImageReader for detection (YUV_420_888)
+        // Get preview size first to match ImageReader with SurfaceTexture
+        val previewSize = try {
+            val chars = cameraManager.getCameraCharacteristics(cameraId)
+            val outputSizes = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                ?.getOutputSizes(SurfaceTexture::class.java)
+            outputSizes?.minByOrNull {
+                kotlin.math.abs(it.width * it.height - 1280 * 720)
+            } ?: Size(1280, 720)
+        } catch (e: Exception) {
+            Size(1280, 720)
+        }
+
+        // ImageReader for detection (YUV_420_888) - match preview size
         val imageReader = ImageReader.newInstance(
-            1280, 720,
+            previewSize.width, previewSize.height,
             ImageFormat.YUV_420_888, 3
         )
         var lastProcessTime = 0L
         imageReader.setOnImageAvailableListener({ reader ->
             val now = System.currentTimeMillis()
-            // Throttle: max 10 fps for detection
-            if (now - lastProcessTime < 100) {
+            // Throttle: max 15 fps for detection
+            if (now - lastProcessTime < 67) {
                 reader.acquireLatestImage()?.close()
                 return@setOnImageAvailableListener
             }
@@ -117,13 +129,6 @@ fun Camera2Preview(
         fun openCamera() {
             if (isDisposed) return
             try {
-                val chars = cameraManager.getCameraCharacteristics(cameraId)
-                val outputSizes = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-                    ?.getOutputSizes(SurfaceTexture::class.java)
-                val previewSize = outputSizes?.minByOrNull {
-                    kotlin.math.abs(it.width * it.height - 1280 * 720)
-                } ?: Size(1280, 720)
-
                 Log.d("Camera2Preview", "Opening camera $cameraId with preview ${previewSize.width}x${previewSize.height}")
 
                 surfaceTexture.setDefaultBufferSize(previewSize.width, previewSize.height)

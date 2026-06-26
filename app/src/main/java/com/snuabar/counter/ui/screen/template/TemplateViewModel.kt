@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.snuabar.counter.core.detection.*
+import com.snuabar.counter.core.detection.tflite.PoseModelConfig
 import com.snuabar.counter.core.template.RecordingSession
 import com.snuabar.counter.core.template.TemplateRecorder
 import com.snuabar.counter.domain.model.SensorType
@@ -28,7 +29,8 @@ class TemplateViewModel @Inject constructor(
     private val templateRepository: TemplateRepository,
     private val userRepository: UserRepository,
     private val recordingSession: RecordingSession,
-    private val detectionEngineFactory: DetectionEngineFactory
+    private val detectionEngineFactory: DetectionEngineFactory,
+    private val detectionPreferences: com.snuabar.counter.data.local.prefs.DetectionPreferences
 ) : ViewModel() {
 
     private val _templates = MutableStateFlow<List<Template>>(emptyList())
@@ -69,6 +71,10 @@ class TemplateViewModel @Inject constructor(
     private val _keypoints = MutableStateFlow<Array<FloatArray>?>(null)
     val keypoints: StateFlow<Array<FloatArray>?> = _keypoints.asStateFlow()
 
+    // FPS from TFLite engine
+    private val _fps = MutableStateFlow(0)
+    val fps: StateFlow<Int> = _fps.asStateFlow()
+
     // Detection engine for recording
     private var recordingEngine: DetectionEngine? = null
     // TemplateRecorder instance for active recording
@@ -80,6 +86,9 @@ class TemplateViewModel @Inject constructor(
     private val _isFrontCamera = MutableStateFlow(true)
     val isFrontCamera: StateFlow<Boolean> = _isFrontCamera.asStateFlow()
 
+    // Cached detection preferences
+    private var cachedPoseModelConfig: PoseModelConfig = PoseModelConfig.STANDARD
+
     private val _selectedCameraId = MutableStateFlow<String?>(null)
     val selectedCameraId: StateFlow<String?> = _selectedCameraId.asStateFlow()
 
@@ -90,6 +99,13 @@ class TemplateViewModel @Inject constructor(
         viewModelScope.launch {
             templateRepository.getAllTemplates().collect { list ->
                 _templates.value = list
+            }
+        }
+
+        // Cache pose model config from preferences
+        viewModelScope.launch {
+            detectionPreferences.poseModelConfigFlow.collect { config ->
+                cachedPoseModelConfig = config
             }
         }
 
@@ -158,10 +174,23 @@ class TemplateViewModel @Inject constructor(
     fun toggleCamera() {
         _isFrontCamera.value = !_isFrontCamera.value
         _selectedCameraId.value = null
+        recordingEngine?.setCameraInfo(_isFrontCamera.value)
     }
 
     fun selectCamera(cameraId: String?) {
         _selectedCameraId.value = cameraId
+        // Update isFrontCamera based on selected camera
+        if (cameraId != null) {
+            try {
+                val cameraManager = context.getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                val chars = cameraManager.getCameraCharacteristics(cameraId)
+                val isFront = chars.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
+                _isFrontCamera.value = isFront
+                recordingEngine?.setCameraInfo(isFront)
+            } catch (e: Exception) {
+                Log.e("CameraDebug", "Failed to get camera characteristics for $cameraId", e)
+            }
+        }
     }
 
     // ---- Recording methods ----
@@ -189,14 +218,23 @@ class TemplateViewModel @Inject constructor(
         recordingEngine = detectionEngineFactory.create(SensorType.VISION, EngineType.TFLITE)
         val tfliteEngine = recordingEngine as? com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine
         tfliteEngine?.let { engine ->
+            engine.setCameraInfo(_isFrontCamera.value)
             engine.startPreview(DetectionConfig(
                 sensorType = SensorType.VISION,
                 threshold = 0.7f,
-                mode = SessionMode.COUNTING
+                mode = SessionMode.COUNTING,
+                poseModelConfig = cachedPoseModelConfig
             ))
             viewModelScope.launch {
-                engine.keypoints.collect { kps ->
-                    _keypoints.value = kps
+                launch {
+                    engine.keypoints.collect { kps ->
+                        _keypoints.value = kps
+                    }
+                }
+                launch {
+                    engine.fps.collect { fps ->
+                        _fps.value = fps
+                    }
                 }
             }
         }

@@ -2,7 +2,7 @@
 
 > **用途：** 本文件用于在多台开发电脑之间同步项目状态。当在新电脑上打开项目时，首先阅读此文件以了解当前进度。
 >
-> **最后更新：** 2026-06-25（会话3）
+> **最后更新：** 2026-06-27（会话4）
 
 > ⚠️ **部分功能待验证：** 音频检测引擎、模板匹配算法尚未在真机上充分测试。TFLite 姿态检测、动作识别、前后摄像头骨架显示已通过真机验证。
 
@@ -24,7 +24,7 @@
 | **架构** | MVVM + Clean Architecture + Repository 模式 |
 | **依赖注入** | Hilt |
 | **本地存储** | Room (SQLite) |
-| **相机** | Camera2（计数） + CameraX（模板录制） |
+| **相机** | Camera2（预览 + 录制） |
 | **图像处理** | OpenCV + TensorFlow Lite (MoveNet) |
 | **音频处理** | AudioRecord + FFT |
 | **图表** | Compose 自绘（柱状图） |
@@ -172,12 +172,17 @@ app/src/main/java/com/snuabar/counter/
 | 27 | UI 美化（动画 + 震动） | ✅ | animateContentSize, graphicsLayer, Vibrator |
 | 28 | 性能优化（相机分辨率） | ✅ | targetResolution 配置 |
 | 29 | Camera2 管线优化 | ✅ | 帧率5→10fps，骨架叠加层，模型热重载，前置摄像头方向修复 |
-| 30 | 架构重构 | ✅ | ActionType→domain.model，SensorType统一，Template+actionType，DB v3 |
-| 31 | TimerService 崩溃修复 | ✅ | Android 12+ 前台服务 5 秒规则修复 |
-| 32 | 模板选择交互优化 | ✅ | 模板必选，自动选择首个，目标值可调 |
-| 33 | 预览组件统一 | ✅ | PoseCameraPreview 统一封装 Camera2 预览 + 骨架绘制 + 摄像头切换 + 权限检查 |
-| 34 | 摄像头切换标配化 | ✅ | CountingScreen 和 TemplateScreen 共用同一套摄像头切换 UI |
-| 35 | 权限内聚化 | ✅ | 相机权限检查移入 PoseCameraPreview，Screen 无需关心权限逻辑 |
+| 30 | MediaPipe PoseLandmarker 迁移 | ✅ | 从手动两阶段 TFLite 推理迁移到 MediaPipe `.task` 模型，3个模型对应3个档位 |
+| 31 | GPU 加速自动回退 | ✅ | 优先尝试 GPU delegate，不支持时自动回退到 CPU，推理速度提升3倍+ |
+| 32 | FPS 实时显示 | ✅ | PoseCameraPreview 左上角叠加骨架刷新频率显示 |
+| 33 | 推理异步化修复 | ✅ | processBitmap 改为 analysisExecutor 异步执行，解决骨架滞后漂移问题 |
+| 34 | 帧率限流调整 | ✅ | 从 10fps 提升到 15fps，GPU 加速下快速模式实测 12fps |
+| 35 | 架构重构 | ✅ | ActionType→domain.model，SensorType统一，Template+actionType，DB v3 |
+| 36 | TimerService 崩溃修复 | ✅ | Android 12+ 前台服务 5 秒规则修复 |
+| 37 | 模板选择交互优化 | ✅ | 模板必选，自动选择首个，目标值可调 |
+| 38 | 预览组件统一 | ✅ | PoseCameraPreview 统一封装 Camera2 预览 + 骨架绘制 + 摄像头切换 + 权限检查 |
+| 39 | 摄像头切换标配化 | ✅ | CountingScreen 和 TemplateScreen 共用同一套摄像头切换 UI |
+| 40 | 权限内聚化 | ✅ | 相机权限检查移入 PoseCameraPreview，Screen 无需关心权限逻辑 |
 
 ---
 
@@ -187,28 +192,31 @@ app/src/main/java/com/snuabar/counter/
 
 | # | 功能 | 难度 | 说明 | 预计工作量 |
 |---|------|------|------|----------|
-| 1 | **自定义样本录制与特征提取** | ⭐⭐ 中等 | 录制界面已有入口，需实现特征提取（视觉：光流直方图；音频：MFCC）和保存 | 4小时 |
-| 2 | **模板匹配集成** | ⭐⭐ 中等 | `VisionTemplateMatcher` / `AudioTemplateMatcher` 算法骨架已有，需与检测引擎集成 | 3小时 |
-| 3 | **TFLite 真机调优** | ⭐⭐ 中等 | 基础骨架和角度阈值已真机验证，需进一步优化计数准确率，自定义模板匹配逻辑待实现 | 2小时 |
+| 1 | **硬件加速开关设置** | ⭐ 简单 | SettingsScreen 添加 GPU/CPU 切换开关，开：支持GPU时使用GPU加速，不支持时使用CPU；关：固定为CPU | 1小时 |
+| 2 | **骨架刷新率提升至 20-23fps** | ⭐⭐ 中等 | 当前快速模式 GPU 加速下 12fps（限流15fps），需进一步调优限流间隔、降低输入分辨率、或尝试 GPU delegate 参数优化 | 2小时 |
+| 3 | **模板录制与模板使用调试** | ⭐⭐⭐ 较难 | TemplateScreen 录制流程、TemplateViewModel 与 TFLiteDetectionEngine 集成、计数页模板匹配逻辑联调 | 4小时 |
+| 4 | **自定义样本录制与特征提取** | ⭐⭐ 中等 | 录制界面已有入口，需实现特征提取（视觉：光流直方图；音频：MFCC）和保存 | 4小时 |
+| 5 | **模板匹配集成** | ⭐⭐ 中等 | `VisionTemplateMatcher` / `AudioTemplateMatcher` 算法骨架已有，需与检测引擎集成 | 3小时 |
+| 6 | **TFLite 真机调优** | ⭐⭐ 中等 | 基础骨架和角度阈值已真机验证，需进一步优化计数准确率，自定义模板匹配逻辑待实现 | 2小时 |
 
 ### 🟡 中优先级（功能增强）
 
 | # | 功能 | 难度 | 说明 | 预计工作量 |
 |---|------|------|------|----------|
-| 4 | **音频检测引擎调优** | ⭐⭐ 中等 | `AudioDetectionEngine` 已有基础实现，需真机调优 | 2小时 |
-| 5 | **计时反馈增强** | ⭐⭐ 中等 | 目标时间提醒（震动+音效）、中途语音播报（可开关） | 3小时 |
-| 6 | **网络备份 UI** | ⭐⭐ 中等 | WebDAV 已实现，需添加配置和触发 UI | 2小时 |
-| 7 | **实时阈值持久化** | ⭐ 简单 | 设置页滑块已有，需保存到数据库并实时应用到检测引擎 | 1小时 |
+| 7 | **音频检测引擎调优** | ⭐⭐ 中等 | `AudioDetectionEngine` 已有基础实现，需真机调优 | 2小时 |
+| 8 | **计时反馈增强** | ⭐⭐ 中等 | 目标时间提醒（震动+音效）、中途语音播报（可开关） | 3小时 |
+| 9 | **网络备份 UI** | ⭐⭐ 中等 | WebDAV 已实现，需添加配置和触发 UI | 2小时 |
+| 10 | **实时阈值持久化** | ⭐ 简单 | 设置页滑块已有，需保存到数据库并实时应用到检测引擎 | 1小时 |
 
 ### 🟢 低优先级（锦上添花）
 
 | # | 功能 | 难度 | 说明 | 预计工作量 |
 |---|------|------|------|----------|
-| 8 | **成就/庆祝系统** | ⭐⭐⭐⭐ 困难 | 完成目标时的动画 + 音效 + 震动反馈 | 4小时 |
-| 9 | **多屏幕尺寸适配** | ⭐⭐ 中等 | 平板/折叠屏适配优化 | 3小时 |
-| 10 | **低端设备性能优化** | ⭐⭐⭐ 较难 | 相机分辨率动态降级、帧率控制、电池优化 | 4小时 |
-| 11 | **单元测试覆盖** | ⭐⭐⭐ 较难 | 已有 DetectionConfigTest，需补 Repository / Engine / ViewModel 测试 | 4小时 |
-| 12 | **集成测试** | ⭐⭐⭐⭐ 困难 | Compose UI Test + CameraX 测试工具 | 8小时 |
+| 11 | **成就/庆祝系统** | ⭐⭐⭐⭐ 困难 | 完成目标时的动画 + 音效 + 震动反馈 | 4小时 |
+| 12 | **多屏幕尺寸适配** | ⭐⭐ 中等 | 平板/折叠屏适配优化 | 3小时 |
+| 13 | **低端设备性能优化** | ⭐⭐⭐ 较难 | 相机分辨率动态降级、帧率控制、电池优化 | 4小时 |
+| 14 | **单元测试覆盖** | ⭐⭐⭐ 较难 | 已有 DetectionConfigTest，需补 Repository / Engine / ViewModel 测试 | 4小时 |
+| 15 | **集成测试** | ⭐⭐⭐⭐ 困难 | Compose UI Test + CameraX 测试工具 | 8小时 |
 
 ---
 
@@ -225,6 +233,9 @@ app/src/main/java/com/snuabar/counter/
 | 2026-06-25 | Camera2 替代 CameraX 用于计数 | 计数界面改用 Camera2 实现更高帧率和更精确控制，模板录制仍用 CameraX |
 | 2026-06-25 | PoseCameraPreview 统一组件 | 将 Camera2 预览、骨架绘制、摄像头切换、权限检查统一封装到单一组件，CountingScreen 和 TemplateScreen 复用 |
 | 2026-06-25 | 摄像头切换作为预览标配 | 所有使用相机预览的页面统一支持摄像头切换（下拉菜单/单按钮），无需重复实现 |
+| 2026-06-27 | MediaPipe PoseLandmarker 替换手动 TFLite 推理 | 使用 `com.google.mediapipe:tasks-vision` 库替代手动两阶段推理，支持 lite/full/heavy 三个 .task 模型文件 |
+| 2026-06-27 | GPU 优先自动回退策略 | PoseLandmarkerHelper 初始化时先尝试 GPU delegate，失败自动回退到 CPU，推理速度提升 3 倍+ |
+| 2026-06-27 | 限流从 10fps 提升到 15fps | Camera2Preview 和 TFLiteDetectionEngine 的限流间隔从 100ms 调整到 67ms，GPU 加速下快速模式实测 12fps |
 
 ---
 
@@ -287,10 +298,15 @@ app/src/main/java/com/snuabar/counter/
 
 ## 下一步建议
 
+**当前会话遗留（会话4）：**
+1. 硬件加速开关设置（SettingsScreen GPU/CPU 切换）
+2. 骨架刷新率提升至 20-23fps（调优限流、降低输入分辨率、GPU delegate 参数优化）
+3. 模板录制与模板使用联调（TemplateScreen 录制流程、TemplateViewModel 与 TFLiteDetectionEngine 集成）
+
 **核心功能补全（让 App 真正可用）：**
-1. TFLite 真机验证角度阈值（俯卧撑/深蹲计数准确率）
-2. 模板匹配集成（自定义模板录制 → 特征提取 → 匹配检测）
-3. 音频检测引擎真机调优
+4. TFLite 真机验证角度阈值（俯卧撑/深蹲计数准确率）
+5. 模板匹配集成（自定义模板录制 → 特征提取 → 匹配检测）
+6. 音频检测引擎真机调优
 
 **功能增强：**
 4. 计时反馈增强（目标时间提醒、语音播报）

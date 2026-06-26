@@ -41,7 +41,12 @@ class DetectionPreferences @Inject constructor(
     val poseModelConfigFlow: Flow<PoseModelConfig> = dataStore.data
         .map { preferences ->
             val configName = preferences[POSE_MODEL_CONFIG] ?: PoseModelConfig.STANDARD.name
-            PoseModelConfig.valueOf(configName)
+            try {
+                PoseModelConfig.valueOf(configName)
+            } catch (e: IllegalArgumentException) {
+                // Fallback for old cached values (e.g. BLAZEPOSE which was removed)
+                PoseModelConfig.STANDARD
+            }
         }
 
     suspend fun setPoseModelConfig(config: PoseModelConfig) {

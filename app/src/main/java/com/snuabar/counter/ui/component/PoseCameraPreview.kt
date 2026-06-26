@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,9 +45,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import kotlin.math.roundToInt
 
 /**
  * Unified camera preview component with pose skeleton overlay and camera switching.
@@ -59,6 +63,7 @@ fun PoseCameraPreview(
     onCameraReady: (() -> Unit)? = null,
     onCameraDisposed: (() -> Unit)? = null,
     keypoints: Array<FloatArray>?,
+    fps: Int = 0,
     // Camera switching
     showCameraSwitch: Boolean = false,
     availableCameras: Map<String, String> = emptyMap(),
@@ -149,8 +154,8 @@ fun PoseCameraPreview(
                                 )
 
                                 fun toScreen(kp: FloatArray): Offset {
-                                    val x = if (isActualFrontCamera) 1f - kp[0] else 1f - kp[0]
-                                    val y = if (isActualFrontCamera) 1f - kp[1] else kp[1]
+                                    val x = if (isActualFrontCamera) 1f - kp[0] else kp[0]
+                                    val y = kp[1]
                                     return Offset(x * size.width, y * size.height)
                                 }
 
@@ -189,6 +194,17 @@ fun PoseCameraPreview(
                 )
             }
         }
+
+        // FPS display (top-left corner)
+        Text(
+            text = "$fps FPS",
+            color = Color(0xFF00FF00),
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 16.dp, top = 16.dp)
+        )
 
         // Camera switch UI
         if (showCameraSwitch) {

@@ -72,6 +72,7 @@ fun CountingScreen(
     val sessionMode by viewModel.sessionMode.collectAsState()
     val targetCount by viewModel.targetCount.collectAsState()
     val keypoints by viewModel.keypoints.collectAsState()
+    val fps by viewModel.fps.collectAsState()
     val debugInfo by viewModel.debugInfo.collectAsState()
 
     // Debug panel visibility (can be toggled in real app, hardcoded for now)
@@ -102,6 +103,7 @@ fun CountingScreen(
             onCameraReady = { viewModel.setupDetection() },
             onCameraDisposed = { viewModel.stopDetection() },
             keypoints = keypoints,
+            fps = fps,
             showCameraSwitch = true,
             availableCameras = availableCameras,
             selectedCameraId = selectedCameraId,

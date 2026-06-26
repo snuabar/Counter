@@ -16,10 +16,12 @@ interface DetectionEngine {
     fun setThreshold(threshold: Float)
     fun isRunning(): Boolean
     val countEvents: Flow<CountEvent>
+    /** Notify the engine about current camera configuration */
+    fun setCameraInfo(isFrontCamera: Boolean) {}
 }
 
 interface DetectionEngineFactory {
-    fun create(sensorType: SensorType, engineType: EngineType = EngineType.OPEN_CV): DetectionEngine
+    fun create(sensorType: SensorType, engineType: EngineType): DetectionEngine
 }
 
 data class DetectionConfig(

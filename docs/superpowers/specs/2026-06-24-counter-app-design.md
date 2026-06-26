@@ -71,14 +71,26 @@
 
 ### 3.1 视觉检测引擎（VisionDetectionEngine）
 
-**职责**：从摄像头帧流中识别周期性动作，输出计数事件。
+**职责**：从摄像头帧流中检测人体姿态关键点，识别周期性动作，输出计数事件。
 
 **核心流程**：
-1. **帧流预处理**：CameraX → YUV → RGB 转换，可选降低分辨率以提升性能
-2. **运动检测**：帧差分/光流 → 判断是否有显著运动，若无运动跳过本帧
-3. **周期性分析**：分析运动强度序列的周期性，计算自相关函数 → 找峰值间隔
-4. **模板匹配（可选）**：若用户录制了样本，计算相似度；若相似度 > 阈值，判定为一次有效动作
-5. **防抖动/去重**：最小间隔过滤（如 500ms 内不重复计数），置信度加权
+1. **帧流采集**：Camera2 → ImageReader → Bitmap 转换
+2. **姿态检测**：MediaPipe PoseLandmarker 检测 33 个人体关键点（x, y, z, visibility）
+3. **GPU 加速**：优先使用 TFLite GPU Delegate，不支持时自动回退到 CPU
+4. **动作识别**：基于关键点角度计算（规则引擎，非 ML 模型）：
+   - 俯卧撑：肘关节角度阈值
+   - 深蹲：膝关节角度阈值
+   - 平板支撑：计时模式，检测人体存在即可
+5. **帧率控制**：Camera2Preview 和 TFLiteDetectionEngine 双端限流（当前 15fps），GPU 加速下快速模式可达 12fps
+6. **骨架可视化**：在预览画面上叠加关键点连线（PoseCameraPreview 统一组件）
+7. **防抖动/去重**：最小间隔过滤（如 500ms 内不重复计数），置信度加权
+
+**模型配置（3 档）**：
+| 档位 | 模型文件 | 特点 | 适用场景 |
+|------|---------|------|---------|
+| 快速 | `pose_landmarker_lite.task` | 延迟低、速度快 | 实时预览、低端设备 |
+| 标准 | `pose_landmarker_full.task` | 精度与速度平衡 | 常规计数 |
+| 精确 | `pose_landmarker_heavy.task` | 精度最高 | 复杂动作、精准计数 |
 
 **接口定义**：
 ```kotlin
@@ -91,6 +103,21 @@ interface DetectionEngine {
     fun setThreshold(threshold: Float)
     val countEvents: Flow<CountEvent>
 }
+
+// 模型配置
+enum class PoseModelConfig(val fileName: String) {
+    LITE("pose_landmarker_lite.task"),
+    FULL("pose_landmarker_full.task"),
+    HEAVY("pose_landmarker_heavy.task")
+}
+
+// 检测配置
+ data class DetectionConfig(
+    val sensorType: SensorType,
+    val templateId: Long? = null,
+    val threshold: Float = 0.7f,
+    val poseModelConfig: PoseModelConfig = PoseModelConfig.FULL
+)
 ```
 
 ### 3.2 音频检测引擎（AudioDetectionEngine）
@@ -283,10 +310,11 @@ Template (可选) --1 CountingSession
 | **异步处理** | Kotlin Coroutines + Flow | 响应式数据流 |
 | **数据库** | Room + SQLite | 类型安全、支持协程 |
 | **图表** | Compose Charts / MPAndroidChart | 数据可视化 |
-| **相机** | CameraX | Google 官方推荐，API 稳定 |
+| **相机** | Camera2（预览 + 录制） | 计数预览和模板录制均使用 Camera2 API，实现更高帧率和更精确控制 |
 | **音频** | AudioRecord | 低延迟音频采集 |
-| **图像处理** | OpenCV Android | 帧差分、光流等 |
-| **可选 ML** | TensorFlow Lite | 复杂动作识别（Phase 3） |
+| **图像处理** | OpenCV Android | 帧差分、光流等（传统算法备用） |
+| **姿态检测** | MediaPipe Tasks Vision (PoseLandmarker) | MediaPipe `.task` 模型，支持 lite/full/heavy 三档 |
+| **ML推理加速** | TFLite GPU Delegate | 优先 GPU，不支持自动回退 CPU |
 
 ---
 
@@ -311,8 +339,10 @@ Template (可选) --1 CountingSession
 
 ### Phase 3：增强优化（预计 2-3 周）
 **目标**：体验优化与扩展性
-- TFLite 可选模型（复杂动作识别）
-- 远程备份接口预留（网盘/NAS）
+- MediaPipe PoseLandmarker 集成（替换手动 TFLite 推理，支持 lite/full/heavy 三档）
+- GPU 加速自动回退（优先 GPU，不支持时回退 CPU）
+- 骨架刷新率优化（Camera2 管线 + 异步推理，目标 20-23fps）
+- 远程备份接口预留（WebDAV 骨架已实现）
 - UI 美化与过渡动画
 - 性能优化（低端设备适配、电池优化）
 - 单元测试覆盖
@@ -323,8 +353,8 @@ Template (可选) --1 CountingSession
 
 | 风险 | 影响 | 应对措施 |
 |------|------|----------|
-| 复杂场景下检测准确率不足 | 高 | 提供阈值调节；Phase 3 引入 TFLite |
-| 低端设备性能瓶颈 | 中 | 提供分辨率/帧率降级选项；OpenCV 轻量配置 |
+| 复杂场景下检测准确率不足 | 高 | 使用 MediaPipe PoseLandmarker（heavy 模型）；提供阈值调节；Phase 3 引入模板匹配 |
+| 低端设备性能瓶颈 | 中 | 提供 lite 模型档位；降低输入分辨率；帧率动态降级；GPU delegate 参数优化 |
 | 音频检测受环境噪音干扰 | 中 | 频带过滤；用户可录制排除噪音的样本 |
 | 多用户数据隔离漏洞 | 中 | Repository 层强制 userId 过滤；单元测试覆盖 |
 | 样本录制体验不佳 | 低 | 录制时实时预览特征提取效果；提供重录选项 |
@@ -337,6 +367,11 @@ Template (可选) --1 CountingSession
 |--------|------|
 | UI 框架 | **Jetpack Compose** |
 | 内置模板（Phase 1） | **拍手**（视觉检测）、**跳绳**（视觉+音频检测） |
+| 姿态检测方案 | **MediaPipe PoseLandmarker**（替代手动 TFLite 推理） |
+| GPU 加速策略 | **优先 GPU，自动回退 CPU**（不支持 GPU 的设备无缝回退） |
+| 动作识别方式 | **规则引擎**（基于关键点角度阈值），非 ML 模型 |
+| 相机方案 | **Camera2**（预览 + 录制） |
+| 预览组件 | **PoseCameraPreview 统一组件**（Camera2 预览 + 骨架绘制 + 摄像头切换 + 权限检查） |
 
 ## 10. 待决策事项
 

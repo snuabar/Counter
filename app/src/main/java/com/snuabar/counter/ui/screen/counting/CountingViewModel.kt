@@ -50,6 +50,10 @@ class CountingViewModel @Inject constructor(
     private val _keypoints = MutableStateFlow<Array<FloatArray>?>(null)
     val keypoints: StateFlow<Array<FloatArray>?> = _keypoints.asStateFlow()
 
+    // FPS from TFLite engine
+    private val _fps = MutableStateFlow(0)
+    val fps: StateFlow<Int> = _fps.asStateFlow()
+
     private val _isRunning = MutableStateFlow(false)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
@@ -219,10 +223,23 @@ class CountingViewModel @Inject constructor(
     fun toggleCamera() {
         _isFrontCamera.value = !_isFrontCamera.value
         _selectedCameraId.value = null // Reset to default selection
+        currentEngine?.setCameraInfo(_isFrontCamera.value)
     }
 
     fun selectCamera(cameraId: String?) {
         _selectedCameraId.value = cameraId
+        // Update isFrontCamera based on selected camera
+        if (cameraId != null) {
+            try {
+                val cameraManager = appContext.getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                val chars = cameraManager.getCameraCharacteristics(cameraId)
+                val isFront = chars.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
+                _isFrontCamera.value = isFront
+                currentEngine?.setCameraInfo(isFront)
+            } catch (e: Exception) {
+                Log.e("CameraDebug", "Failed to get camera characteristics for $cameraId", e)
+            }
+        }
     }
 
     fun setActionType(actionType: ActionType) {
@@ -329,6 +346,7 @@ class CountingViewModel @Inject constructor(
         }
         // Start engine for pose detection only (inference + skeleton, no counting)
         if (engine is com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine) {
+            engine.setCameraInfo(_isFrontCamera.value)
             val config = DetectionConfig(
                 sensorType = SensorType.VISION,
                 poseModelConfig = cachedPoseModelConfig,
@@ -347,8 +365,15 @@ class CountingViewModel @Inject constructor(
         val tfliteEngine = currentEngine as? com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine ?: return
         keypointCollectionJob?.cancel()
         keypointCollectionJob = viewModelScope.launch {
-            tfliteEngine.keypoints.collect { kps ->
-                _keypoints.value = kps
+            launch {
+                tfliteEngine.keypoints.collect { kps ->
+                    _keypoints.value = kps
+                }
+            }
+            launch {
+                tfliteEngine.fps.collect { fps ->
+                    _fps.value = fps
+                }
             }
         }
     }
@@ -381,13 +406,12 @@ class CountingViewModel @Inject constructor(
         ensureKeypointsCollection()
     }
 
-    private fun setupEngine(sensorType: SensorType, useTFLite: Boolean = false) {
-        val engineType = if (useTFLite) EngineType.TFLITE else EngineType.OPEN_CV
-        val needsNewEngine = currentEngine == null || currentSensorType != sensorType || (useTFLite && currentEngine !is com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine)
+    private fun setupEngine(sensorType: SensorType) {
+        val needsNewEngine = currentEngine == null || currentSensorType != sensorType || currentEngine !is com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine
         if (needsNewEngine) {
             currentEngine?.stop()
             keypointCollectionJob?.cancel()
-            currentEngine = detectionEngineFactory.create(sensorType, engineType)
+            currentEngine = detectionEngineFactory.create(sensorType, EngineType.TFLITE)
             currentSensorType = sensorType
 
             viewModelScope.launch {
@@ -400,13 +424,18 @@ class CountingViewModel @Inject constructor(
         }
 
         // Always ensure keypoints collection is running for TFLite
-        if (useTFLite) {
-            val tfliteEngine = currentEngine as? com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine
-            tfliteEngine?.let { engine ->
-                keypointCollectionJob?.cancel()
-                keypointCollectionJob = viewModelScope.launch {
+        val tfliteEngine = currentEngine as? com.snuabar.counter.core.detection.tflite.TFLiteDetectionEngine
+        tfliteEngine?.let { engine ->
+            keypointCollectionJob?.cancel()
+            keypointCollectionJob = viewModelScope.launch {
+                launch {
                     engine.keypoints.collect { kps ->
                         _keypoints.value = kps
+                    }
+                }
+                launch {
+                    engine.fps.collect { fps ->
+                        _fps.value = fps
                     }
                 }
             }
@@ -429,8 +458,7 @@ class CountingViewModel @Inject constructor(
         val actualActionType = _actionType.value
         
         // Use TFLite for pose-based detection (all visual actions use pose detection)
-        val useTFLite = actualSensorType == SensorType.VISION
-        setupEngine(actualSensorType, useTFLite)
+        setupEngine(actualSensorType)
         _isRunning.value = true
         _isTimerMode.value = (actualMode == SessionMode.TIMER)
         _elapsedSeconds.value = 0
@@ -493,6 +521,7 @@ class CountingViewModel @Inject constructor(
                     mode = actualMode,
                     targetSeconds = actualTargetSeconds,
                     targetResolution = targetResolution,
+                    poseModelConfig = cachedPoseModelConfig,
                     actionType = actualActionType,
                     template = resolvedTemplate
                 )

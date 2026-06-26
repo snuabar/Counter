@@ -152,6 +152,7 @@ private fun RecordingPanel(
 ) {
     val context = LocalContext.current
     val keypoints by viewModel.keypoints.collectAsState()
+    val fps by viewModel.fps.collectAsState()
     val isRecording by viewModel.isRecording.collectAsState()
 
     // Camera selection state
@@ -169,6 +170,7 @@ private fun RecordingPanel(
                 cameraId = effectiveCameraId,
                 onBitmap = { bitmap -> viewModel.processBitmap(bitmap) },
                 keypoints = keypoints,
+                fps = fps,
                 showCameraSwitch = true,
                 availableCameras = availableCameras,
                 selectedCameraId = selectedCameraId,
