@@ -1,9 +1,12 @@
 package com.snuabar.counter.core.detection
 
 import com.snuabar.counter.core.detection.tflite.PoseModelConfig
-import com.snuabar.counter.core.detection.tflite.action.ActionType
+import com.snuabar.counter.domain.model.ActionType
+import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.SessionMode
 import kotlinx.coroutines.flow.Flow
+
+import com.snuabar.counter.core.detection.tflite.action.DetectionDebugInfo
 
 interface DetectionEngine {
     fun start(config: DetectionConfig)
@@ -11,11 +14,14 @@ interface DetectionEngine {
     fun resume()
     fun stop()
     fun setThreshold(threshold: Float)
+    fun isRunning(): Boolean
     val countEvents: Flow<CountEvent>
+    /** Notify the engine about current camera configuration */
+    fun setCameraInfo(isFrontCamera: Boolean) {}
 }
 
 interface DetectionEngineFactory {
-    fun create(sensorType: SensorType, engineType: EngineType = EngineType.OPEN_CV): DetectionEngine
+    fun create(sensorType: SensorType, engineType: EngineType): DetectionEngine
 }
 
 data class DetectionConfig(
@@ -26,15 +32,15 @@ data class DetectionConfig(
     val targetSeconds: Int? = null,
     val targetResolution: android.util.Size = android.util.Size(640, 480),
     val poseModelConfig: PoseModelConfig = PoseModelConfig.STANDARD,
-    val actionType: ActionType = ActionType.PUSH_UP
+    val actionType: ActionType = ActionType.CUSTOM,
+    val template: com.snuabar.counter.domain.model.Template? = null
 )
-
-enum class SensorType { VISION, AUDIO }
 
 enum class EngineType { OPEN_CV, TFLITE }
 
 data class CountEvent(
     val timestamp: Long = System.currentTimeMillis(),
     val count: Int,
-    val confidence: Float
+    val confidence: Float,
+    val debugInfo: DetectionDebugInfo? = null
 )

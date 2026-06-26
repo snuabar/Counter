@@ -1,5 +1,6 @@
 package com.snuabar.counter.core.detection.tflite.action
 
+import com.snuabar.counter.domain.model.ActionType
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -16,16 +17,24 @@ abstract class BasePoseActionDetector(
     protected var currentState: ActionState = ActionState.IDLE
     protected var count: Int = 0
     protected var confidence: Float = 0f
-    
-    // Cooldown to prevent double-counting
-    protected val cooldownFrames: Int = 10
+
+    // Cooldown to prevent double-counting (configurable via subclass)
+    protected open val cooldownFrames: Int = 15
     protected var cooldownCounter: Int = 0
+
+    // Last detected angle for debugging
+    protected var lastAngle: Float = 0f
+    protected var lastLeftAngle: Float = 0f
+    protected var lastRightAngle: Float = 0f
 
     override fun reset() {
         currentState = ActionState.IDLE
         count = 0
         confidence = 0f
         cooldownCounter = 0
+        lastAngle = 0f
+        lastLeftAngle = 0f
+        lastRightAngle = 0f
     }
 
     /**
@@ -71,5 +80,25 @@ abstract class BasePoseActionDetector(
 
     protected fun isInCooldown(): Boolean {
         return cooldownCounter > 0
+    }
+
+    /**
+     * Create structured debug info for the result.
+     */
+    protected fun createDebugInfo(
+        straightThreshold: Float,
+        bentThreshold: Float,
+        message: String
+    ): DetectionDebugInfo {
+        return DetectionDebugInfo(
+            currentAngle = lastAngle,
+            straightThreshold = straightThreshold,
+            bentThreshold = bentThreshold,
+            state = currentState,
+            cooldownCounter = cooldownCounter,
+            cooldownFrames = cooldownFrames,
+            confidence = confidence,
+            message = message
+        )
     }
 }

@@ -1,74 +1,59 @@
 package com.snuabar.counter.ui.screen.counting
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.VibrationEffect
 import android.os.Vibrator
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.view.PreviewView
-import androidx.compose.animation.core.*
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.*
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.snuabar.counter.core.detection.tflite.action.ActionType
-
-import java.util.concurrent.Executors
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ActionTypeSelector(
-    selectedAction: ActionType,
-    onActionSelected: (ActionType) -> Unit,
-    enabled: Boolean = true
-) {
-    val actions = listOf(
-        ActionType.PUSH_UP to "俯卧撑",
-        ActionType.SQUAT to "深蹲",
-        ActionType.PLANK to "平板支撑"
-    )
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceEvenly
-    ) {
-        actions.forEach { (action, label) ->
-            val isSelected = selectedAction == action
-            FilterChip(
-                selected = isSelected,
-                onClick = { if (enabled) onActionSelected(action) },
-                label = { Text(label) },
-                enabled = enabled
-            )
-        }
-    }
-}
+import com.snuabar.counter.core.detection.tflite.action.ActionState
+import com.snuabar.counter.ui.component.PoseCameraPreview
 
 @Composable
 fun CountingScreen(
     viewModel: CountingViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
 
     val currentCount by viewModel.currentCount.collectAsState()
     val isRunning by viewModel.isRunning.collectAsState()
@@ -79,6 +64,18 @@ fun CountingScreen(
     val targetSeconds by viewModel.targetSeconds.collectAsState()
     val targetResolution by viewModel.targetResolution.collectAsState()
     val actionType by viewModel.actionType.collectAsState()
+    val isFrontCamera by viewModel.isFrontCamera.collectAsState()
+    val availableCameras by viewModel.availableCameras.collectAsState()
+    val selectedCameraId by viewModel.selectedCameraId.collectAsState()
+    val templates by viewModel.templates.collectAsState()
+    val selectedTemplate by viewModel.selectedTemplate.collectAsState()
+    val sessionMode by viewModel.sessionMode.collectAsState()
+    val targetCount by viewModel.targetCount.collectAsState()
+    val keypoints by viewModel.keypoints.collectAsState()
+    val fps by viewModel.fps.collectAsState()
+    val debugInfo by viewModel.debugInfo.collectAsState()
+
+    // Debug panel visibility (can be toggled in real app, hardcoded for now)
 
     // Haptic feedback on count change
     val vibrator = remember { context.getSystemService(Vibrator::class.java) }
@@ -95,101 +92,33 @@ fun CountingScreen(
         }
     }
 
-    // Camera permission
-    var hasCameraPermission by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
-        )
-    }
+    // Determine effective camera ID (default to physical camera 2 = wide angle back)
+    val effectiveCameraId = selectedCameraId ?: if (isFrontCamera) "1" else "2"
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        hasCameraPermission = isGranted
-    }
-
-    // PreviewView
-    val previewView = remember { PreviewView(context) }
-
-    // Camera provider
-    val cameraProvider = remember { mutableStateOf<ProcessCameraProvider?>(null) }
-
-    LaunchedEffect(Unit) {
-        val future = ProcessCameraProvider.getInstance(context)
-        future.addListener({
-            cameraProvider.value = future.get()
-        }, ContextCompat.getMainExecutor(context))
-    }
-
-    // Camera setup - always bind preview, add imageAnalysis when running
-    DisposableEffect(lifecycleOwner, isRunning, hasCameraPermission, cameraProvider.value) {
-        val provider = cameraProvider.value
-        if (provider == null || !hasCameraPermission) return@DisposableEffect onDispose {}
-
-        val preview = Preview.Builder().build().apply {
-            setSurfaceProvider(previewView.surfaceProvider)
-        }
-
-        val useCases = mutableListOf<androidx.camera.core.UseCase>(preview)
-
-        if (isRunning) {
-            val imageAnalysis = ImageAnalysis.Builder()
-                .setTargetResolution(targetResolution)
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-
-            viewModel.getImageAnalyzer()?.let { analyzer ->
-                imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), analyzer)
-            }
-
-            useCases.add(imageAnalysis)
-        }
-
-        provider.bindToLifecycle(
-            lifecycleOwner,
-            CameraSelector.DEFAULT_BACK_CAMERA,
-            *useCases.toTypedArray()
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Camera preview (full screen)
+        PoseCameraPreview(
+            cameraId = effectiveCameraId,
+            onBitmap = { bitmap -> viewModel.processBitmap(bitmap) },
+            onCameraReady = { viewModel.setupDetection() },
+            onCameraDisposed = { viewModel.stopDetection() },
+            keypoints = keypoints,
+            fps = fps,
+            showCameraSwitch = true,
+            availableCameras = availableCameras,
+            selectedCameraId = selectedCameraId,
+            isFrontCamera = isFrontCamera,
+            onCameraSwitch = { viewModel.selectCamera(it) },
+            onToggleCamera = { viewModel.toggleCamera() },
+            modifier = Modifier.fillMaxSize()
         )
 
-        onDispose {
-            provider.unbindAll()
-        }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Camera preview (top portion)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            if (hasCameraPermission) {
-                AndroidView(
-                    factory = { previewView },
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
-                Column(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text("需要相机权限")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }) {
-                        Text("授予权限")
-                    }
-                }
-            }
-        }
-
-        // Bottom UI section
+        // Bottom UI section (overlay on preview)
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .background(Color.Black.copy(alpha = 0.5f))
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -278,22 +207,110 @@ fun CountingScreen(
 
             // Action type selector (only when not running)
             if (!isRunning) {
-                ActionTypeSelector(
-                    selectedAction = actionType,
-                    onActionSelected = { viewModel.setActionType(it) },
-                    enabled = !isRunning
-                )
+                // Template selection (required)
+                if (templates.isNotEmpty()) {
+                    var templateExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(
+                            onClick = { templateExpanded = true },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = selectedTemplate?.let { "模板: ${it.name}" } ?: "选择模板",
+                                maxLines = 1
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = templateExpanded,
+                            onDismissRequest = { templateExpanded = false }
+                        ) {
+                            templates.forEach { template ->
+                                DropdownMenuItem(
+                                    text = { 
+                                        Text("${template.name} (${if (template.mode == com.snuabar.counter.domain.model.SessionMode.TIMER) "计时" else "计数"})") 
+                                    },
+                                    onClick = {
+                                        viewModel.selectTemplate(template)
+                                        templateExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // Target settings with +/- buttons
+                if (sessionMode == com.snuabar.counter.domain.model.SessionMode.COUNTING) {
+                    // Target count with +/- buttons
+                    val currentTargetCount = targetCount ?: 0
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("目标: ", style = MaterialTheme.typography.bodyMedium)
+                        IconButton(
+                            onClick = { 
+                                val newValue = (currentTargetCount - 1).coerceAtLeast(0)
+                                viewModel.setTargetCount(if (newValue == 0) null else newValue)
+                            }
+                        ) {
+                            Text("-", fontSize = 20.sp)
+                        }
+                        Text(
+                            text = if (currentTargetCount == 0) "无限" else "$currentTargetCount 次",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        IconButton(
+                            onClick = { 
+                                viewModel.setTargetCount(currentTargetCount + 1)
+                            }
+                        ) {
+                            Text("+", fontSize = 20.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                } else if (sessionMode == com.snuabar.counter.domain.model.SessionMode.TIMER) {
+                    // Target time with +/- buttons (in 30 second increments)
+                    val currentTargetSeconds = targetSeconds ?: 0
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("目标: ", style = MaterialTheme.typography.bodyMedium)
+                        IconButton(
+                            onClick = { 
+                                val newValue = (currentTargetSeconds - 30).coerceAtLeast(0)
+                                viewModel.setTargetSeconds(if (newValue == 0) null else newValue)
+                            }
+                        ) {
+                            Text("-", fontSize = 20.sp)
+                        }
+                        Text(
+                            text = if (currentTargetSeconds == 0) "无限" else "${currentTargetSeconds / 60}:${"%02d".format(currentTargetSeconds % 60)}",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(horizontal = 16.dp)
+                        )
+                        IconButton(
+                            onClick = { 
+                                viewModel.setTargetSeconds(currentTargetSeconds + 30)
+                            }
+                        ) {
+                            Text("+", fontSize = 20.sp)
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
                 Spacer(modifier = Modifier.height(16.dp))
             } else {
                 // Show current action during counting
-                val actionName = when (actionType) {
-                    ActionType.PUSH_UP -> "俯卧撑"
-                    ActionType.SQUAT -> "深蹲"
-                    ActionType.PLANK -> "平板支撑"
-                    ActionType.CUSTOM -> "自定义"
-                }
+                val actionName = selectedTemplate?.name ?: "自定义"
                 Text(
-                    text = "当前动作: $actionName",
+                    text = "当前: $actionName (${if (isTimerMode) "计时" else "计数"})",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -306,8 +323,11 @@ fun CountingScreen(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 if (!isRunning) {
-                    Button(onClick = { viewModel.startCounting(mode = com.snuabar.counter.domain.model.SessionMode.COUNTING, actionType = actionType) }) {
-                        Text("开始计数")
+                    Button(
+                        onClick = { viewModel.startCounting() },
+                        enabled = selectedTemplate != null
+                    ) {
+                        Text("开始")
                     }
                 } else {
                     Button(onClick = { viewModel.pauseCounting() }) {
@@ -323,6 +343,85 @@ fun CountingScreen(
                     Text("重置")
                 }
             }
+
+            // Debug info panel (shown when running and debug info available)
+            val currentDebugInfo = debugInfo
+            if (isRunning && currentDebugInfo != null) {
+                Spacer(modifier = Modifier.height(8.dp))
+                DebugInfoPanel(debugInfo = currentDebugInfo)
+            }
+        }
+    }
+}
+
+/**
+ * Debug info panel showing real-time detection parameters.
+ */
+@Composable
+private fun DebugInfoPanel(
+    debugInfo: com.snuabar.counter.core.detection.tflite.action.DetectionDebugInfo
+) {
+    val stateColor = when (debugInfo.state) {
+        ActionState.IDLE -> MaterialTheme.colorScheme.outline
+        ActionState.IN_PROGRESS -> MaterialTheme.colorScheme.primary
+        ActionState.COMPLETED -> MaterialTheme.colorScheme.tertiary
+    }
+    val stateText = when (debugInfo.state) {
+        ActionState.IDLE -> "等待"
+        ActionState.IN_PROGRESS -> "进行中"
+        ActionState.COMPLETED -> "完成"
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = "调试信息",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "角度: ${debugInfo.currentAngle.toInt()}°",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = "阈值: ${debugInfo.bentThreshold.toInt()}-${debugInfo.straightThreshold.toInt()}°",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text(
+                        text = "状态: $stateText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = stateColor
+                    )
+                    Text(
+                        text = "冷却: ${debugInfo.cooldownCounter}/${debugInfo.cooldownFrames}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            Text(
+                text = "置信度: ${(debugInfo.confidence * 100).toInt()}%",
+                style = MaterialTheme.typography.bodySmall
+            )
+            Text(
+                text = debugInfo.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
         }
     }
 }

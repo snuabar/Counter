@@ -3,6 +3,8 @@ package com.snuabar.counter.ui.screen.settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
@@ -11,7 +13,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -35,6 +39,18 @@ fun SettingsScreen(
     val threshold by viewModel.threshold.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val poseModelConfig by viewModel.poseModelConfig.collectAsState()
+    val voiceAnnouncement by viewModel.voiceAnnouncement.collectAsState()
+    val webDavBaseUrl by viewModel.webDavBaseUrl.collectAsState()
+    val webDavUsername by viewModel.webDavUsername.collectAsState()
+    val webDavPassword by viewModel.webDavPassword.collectAsState()
+    val isWebDavConnected by viewModel.isWebDavConnected.collectAsState()
+    val isWebDavUploading by viewModel.isWebDavUploading.collectAsState()
+    val webDavMessage by viewModel.webDavMessage.collectAsState()
+
+    // Local text field state, synced with ViewModel
+    var baseUrlInput by remember(webDavBaseUrl) { mutableStateOf(webDavBaseUrl) }
+    var usernameInput by remember(webDavUsername) { mutableStateOf(webDavUsername) }
+    var passwordInput by remember(webDavPassword) { mutableStateOf(webDavPassword) }
 
     // Snackbar
     val snackbarHostState = remember { SnackbarHostState() }
@@ -74,7 +90,10 @@ fun SettingsScreen(
         )
 
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // User Management Card
@@ -184,6 +203,36 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            // Voice announcement setting
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.setVoiceAnnouncement(!voiceAnnouncement) }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "语音播报",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = "计时模式下每30秒播报一次时间",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                    Switch(
+                        checked = voiceAnnouncement,
+                        onCheckedChange = { viewModel.setVoiceAnnouncement(it) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             // Theme mode setting
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
@@ -237,6 +286,101 @@ fun SettingsScreen(
                         OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/json", "text/plain")) }) {
                             Text("导入")
                         }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Remote backup (WebDAV) settings
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "远程备份",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = baseUrlInput,
+                        onValueChange = { baseUrlInput = it },
+                        label = { Text("服务器地址") },
+                        placeholder = { Text("https://example.com/dav") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = usernameInput,
+                        onValueChange = { usernameInput = it },
+                        label = { Text("用户名") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = passwordInput,
+                        onValueChange = { passwordInput = it },
+                        label = { Text("密码") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Save config button + test connection
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                viewModel.setWebDavConfig(baseUrlInput, usernameInput, passwordInput)
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("保存配置")
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.testWebDavConnection() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (isWebDavConnected) "已连接" else "测试连接")
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.uploadToWebDav() },
+                            enabled = !isWebDavUploading,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (isWebDavUploading) "上传中..." else "上传备份")
+                        }
+                        OutlinedButton(
+                            onClick = { viewModel.restoreFromWebDav() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("从远程恢复")
+                        }
+                    }
+
+                    if (webDavMessage.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = webDavMessage,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (webDavMessage.contains("成功") || webDavMessage.contains("已连接"))
+                                MaterialTheme.colorScheme.primary
+                            else
+                                MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }
