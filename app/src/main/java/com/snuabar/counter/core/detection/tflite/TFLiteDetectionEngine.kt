@@ -9,10 +9,13 @@ import com.snuabar.counter.core.detection.DetectionEngine
 import com.snuabar.counter.core.detection.tflite.action.ActionDetectorFactory
 import com.snuabar.counter.core.detection.tflite.action.PoseActionDetector
 import com.snuabar.counter.core.template.RecordingSession
+import com.snuabar.counter.data.local.prefs.DetectionPreferences
 import com.snuabar.counter.domain.model.ActionType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -26,7 +29,8 @@ import javax.inject.Inject
  */
 class TFLiteDetectionEngine @Inject constructor(
     private val context: Context,
-    private val recordingSession: RecordingSession
+    private val recordingSession: RecordingSession,
+    private val detectionPreferences: DetectionPreferences
 ) : DetectionEngine {
 
     private val _countEvents = MutableStateFlow(CountEvent(count = 0, confidence = 0f))
@@ -140,14 +144,16 @@ class TFLiteDetectionEngine @Inject constructor(
 
     private fun initPoseLandmarker(modelPath: String) {
         try {
+            val useGpu = runBlocking { detectionPreferences.gpuAccelerationFlow.first() }
             poseLandmarkerHelper = PoseLandmarkerHelper(
                 context = context,
                 modelFileName = modelPath,
                 minPoseDetectionConfidence = 0.5f,
                 minPoseTrackingConfidence = 0.5f,
-                minPosePresenceConfidence = 0.5f
+                minPosePresenceConfidence = 0.5f,
+                useGpu = useGpu
             )
-            android.util.Log.d("TFLite", "PoseLandmarker initialized: $modelPath")
+            android.util.Log.d("TFLite", "PoseLandmarker initialized: $modelPath (GPU=$useGpu)")
         } catch (e: Exception) {
             android.util.Log.e("TFLite", "PoseLandmarker init failed: ${e.message}")
         }

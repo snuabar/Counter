@@ -43,6 +43,9 @@ class SettingsViewModel @Inject constructor(
     private val _voiceAnnouncement = MutableStateFlow(false)
     val voiceAnnouncement: StateFlow<Boolean> = _voiceAnnouncement.asStateFlow()
 
+    private val _gpuAcceleration = MutableStateFlow(true)
+    val gpuAcceleration: StateFlow<Boolean> = _gpuAcceleration.asStateFlow()
+
     // WebDAV settings
     private val _webDavBaseUrl = MutableStateFlow("")
     val webDavBaseUrl: StateFlow<String> = _webDavBaseUrl.asStateFlow()
@@ -109,6 +112,11 @@ class SettingsViewModel @Inject constructor(
                 _voiceAnnouncement.value = enabled
             }
         }
+        viewModelScope.launch {
+            detectionPreferences.gpuAccelerationFlow.collect { enabled ->
+                _gpuAcceleration.value = enabled
+            }
+        }
     }
 
     fun setThreshold(value: Float) {
@@ -132,6 +140,12 @@ class SettingsViewModel @Inject constructor(
     fun setVoiceAnnouncement(enabled: Boolean) {
         viewModelScope.launch {
             detectionPreferences.setVoiceAnnouncement(enabled)
+        }
+    }
+
+    fun setGpuAcceleration(enabled: Boolean) {
+        viewModelScope.launch {
+            detectionPreferences.setGpuAcceleration(enabled)
         }
     }
 

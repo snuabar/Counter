@@ -40,6 +40,7 @@ fun SettingsScreen(
     val themeMode by viewModel.themeMode.collectAsState()
     val poseModelConfig by viewModel.poseModelConfig.collectAsState()
     val voiceAnnouncement by viewModel.voiceAnnouncement.collectAsState()
+    val gpuAcceleration by viewModel.gpuAcceleration.collectAsState()
     val webDavBaseUrl by viewModel.webDavBaseUrl.collectAsState()
     val webDavUsername by viewModel.webDavUsername.collectAsState()
     val webDavPassword by viewModel.webDavPassword.collectAsState()
@@ -198,6 +199,36 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // GPU Acceleration setting
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.setGpuAcceleration(!gpuAcceleration) }
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "硬件加速",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = if (gpuAcceleration) "使用GPU加速推理（更快）" else "使用CPU推理（更兼容）",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                    Switch(
+                        checked = gpuAcceleration,
+                        onCheckedChange = { viewModel.setGpuAcceleration(it) }
+                    )
                 }
             }
 
