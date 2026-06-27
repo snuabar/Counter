@@ -18,7 +18,7 @@ import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 class PoseLandmarkerHelper(
     context: Context,
     modelFileName: String,
-    private val runningMode: RunningMode = RunningMode.IMAGE,
+    private val runningMode: RunningMode = RunningMode.VIDEO,
     private val minPoseDetectionConfidence: Float = 0.5f,
     private val minPoseTrackingConfidence: Float = 0.5f,
     private val minPosePresenceConfidence: Float = 0.5f,
@@ -74,13 +74,18 @@ class PoseLandmarkerHelper(
 
     /**
      * Detect pose landmarks from a single bitmap image.
+     * For VIDEO mode, timestamp is used for cross-frame tracking.
      * Returns the first detected person's landmarks (33 keypoints) or null.
      */
-    fun detect(bitmap: Bitmap): PoseLandmarkerResult? {
+    fun detect(bitmap: Bitmap, timestampMs: Long = System.currentTimeMillis()): PoseLandmarkerResult? {
         if (poseLandmarker == null) return null
         val mpImage = BitmapImageBuilder(bitmap).build()
         return try {
-            poseLandmarker!!.detect(mpImage)
+            if (runningMode == RunningMode.VIDEO) {
+                poseLandmarker!!.detectForVideo(mpImage, timestampMs)
+            } else {
+                poseLandmarker!!.detect(mpImage)
+            }
         } catch (e: Exception) {
             android.util.Log.e("PoseLandmarker", "Detection failed: ${e.message}")
             null

@@ -76,7 +76,7 @@ class CountingViewModel @Inject constructor(
     private val _targetSeconds = MutableStateFlow<Int?>(null)
     val targetSeconds: StateFlow<Int?> = _targetSeconds.asStateFlow()
 
-    private val _targetResolution = MutableStateFlow(android.util.Size(640, 480))
+    private val _targetResolution = MutableStateFlow(android.util.Size(640, 360))
     val targetResolution: StateFlow<android.util.Size> = _targetResolution.asStateFlow()
 
     private val _actionType = MutableStateFlow(ActionType.CUSTOM)
@@ -446,7 +446,7 @@ class CountingViewModel @Inject constructor(
         sensorType: SensorType = SensorType.VISION,
         mode: SessionMode? = null,
         targetSeconds: Int? = null,
-        targetResolution: android.util.Size = android.util.Size(640, 480),
+        targetResolution: android.util.Size = android.util.Size(640, 360),
         actionType: ActionType = ActionType.CUSTOM,
         templateId: Long? = null
     ) {

@@ -126,6 +126,7 @@ fun PoseCameraPreview(
                 onBitmap = onBitmap,
                 onCameraReady = onCameraReady,
                 onCameraDisposed = onCameraDisposed,
+                isFrontCamera = isActualFrontCamera,
                 modifier = Modifier.fillMaxSize()
             ) { textureView ->
                 AndroidView(

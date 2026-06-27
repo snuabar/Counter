@@ -30,7 +30,7 @@ data class DetectionConfig(
     val threshold: Float = 0.7f,
     val mode: SessionMode = SessionMode.COUNTING,
     val targetSeconds: Int? = null,
-    val targetResolution: android.util.Size = android.util.Size(640, 480),
+    val targetResolution: android.util.Size = android.util.Size(640, 360),
     val poseModelConfig: PoseModelConfig = PoseModelConfig.STANDARD,
     val actionType: ActionType = ActionType.CUSTOM,
     val template: com.snuabar.counter.domain.model.Template? = null

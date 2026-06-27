@@ -41,6 +41,7 @@ fun Camera2Preview(
     onBitmap: (Bitmap) -> Unit,
     onCameraReady: (() -> Unit)? = null,
     onCameraDisposed: (() -> Unit)? = null,
+    isFrontCamera: Boolean = false,
     modifier: Modifier = Modifier,
     content: @Composable (TextureView) -> Unit
 ) {
@@ -78,8 +79,6 @@ fun Camera2Preview(
         var isDisposed = false
         val cameraThread = HandlerThread("CameraThread").apply { start() }
         val cameraHandler = Handler(cameraThread.looper)
-        val analysisThread = HandlerThread("AnalysisThread").apply { start() }
-        val analysisHandler = Handler(analysisThread.looper)
 
         // Get preview size first to match ImageReader with SurfaceTexture
         val previewSize = try {
@@ -87,10 +86,10 @@ fun Camera2Preview(
             val outputSizes = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                 ?.getOutputSizes(SurfaceTexture::class.java)
             outputSizes?.minByOrNull {
-                kotlin.math.abs(it.width * it.height - 1280 * 720)
-            } ?: Size(1280, 720)
+                kotlin.math.abs(it.width * it.height - 640 * 360)
+            } ?: Size(640, 360)
         } catch (e: Exception) {
-            Size(1280, 720)
+            Size(640, 360)
         }
 
         // ImageReader for detection (YUV_420_888) - match preview size
@@ -101,28 +100,30 @@ fun Camera2Preview(
         var lastProcessTime = 0L
         imageReader.setOnImageAvailableListener({ reader ->
             val now = System.currentTimeMillis()
-            // Throttle: max 15 fps for detection
-            if (now - lastProcessTime < 67) {
+            // Throttle: fixed at 30 fps
+            if (now - lastProcessTime < 33) {
                 reader.acquireLatestImage()?.close()
                 return@setOnImageAvailableListener
             }
             lastProcessTime = now
             val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
-            // Convert YUV on camera thread (fast), then pass bitmap to analysis thread
-            val bitmap = try {
-                yuvToBitmap(image)
-            } catch (e: Exception) {
-                Log.e("Camera2Preview", "YUV conversion error: ${e.message}")
+            try {
+                val bitmap = yuvToBitmap(image)
                 image.close()
-                return@setOnImageAvailableListener
-            }
-            image.close()
-            analysisHandler.post {
-                try {
-                    onBitmap(bitmap)
-                } catch (e: Exception) {
-                    Log.e("Camera2Preview", "Frame processing error: ${e.message}")
+                // Rotate landscape bitmap to portrait for MediaPipe
+                val rotatedBitmap = if (bitmap.width > bitmap.height) {
+                    val rotationAngle = if (isFrontCamera) 270f else 90f
+                    val matrix = android.graphics.Matrix().apply { postRotate(rotationAngle) }
+                    Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true).also {
+                        if (!bitmap.isRecycled) bitmap.recycle()
+                    }
+                } else {
+                    bitmap
                 }
+                onBitmap(rotatedBitmap)
+            } catch (e: Exception) {
+                Log.e("Camera2Preview", "Frame processing error: ${e.message}")
+                try { image.close() } catch (_: Exception) {}
             }
         }, cameraHandler)
 
@@ -216,7 +217,6 @@ fun Camera2Preview(
                 cameraDevice?.close()
                 imageReader.close()
                 cameraThread.quitSafely()
-                analysisThread.quitSafely()
             } catch (e: Exception) {
                 Log.d("Camera2Preview", "Cleanup error: ${e.message}")
             }
@@ -244,6 +244,14 @@ private fun yuvToBitmap(image: android.media.Image): Bitmap {
     val uvRowStride = uPlane.rowStride
     val uvPixelStride = uPlane.pixelStride
 
+    // Copy buffers to arrays for fast indexed access (avoid repeated JNI calls)
+    val yBytes = ByteArray(yBuffer.remaining())
+    val uBytes = ByteArray(uBuffer.remaining())
+    val vBytes = ByteArray(vBuffer.remaining())
+    yBuffer.get(yBytes)
+    uBuffer.get(uBytes)
+    vBuffer.get(vBytes)
+
     val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val pixels = IntArray(width * height)
 
@@ -254,9 +262,9 @@ private fun yuvToBitmap(image: android.media.Image): Bitmap {
             val yIdx = yRowOffset + col
             val uvIdx = uvRowOffset + (col / 2) * uvPixelStride
 
-            val y = (yBuffer.get(yIdx).toInt() and 0xFF) - 16
-            val u = (uBuffer.get(uvIdx).toInt() and 0xFF) - 128
-            val v = (vBuffer.get(uvIdx).toInt() and 0xFF) - 128
+            val y = (yBytes[yIdx].toInt() and 0xFF) - 16
+            val u = (uBytes[uvIdx].toInt() and 0xFF) - 128
+            val v = (vBytes[uvIdx].toInt() and 0xFF) - 128
 
             val yy = y.coerceAtLeast(0)
             var r = (1.164f * yy + 1.596f * v).toInt()

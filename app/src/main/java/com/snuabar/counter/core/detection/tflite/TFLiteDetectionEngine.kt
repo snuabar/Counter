@@ -216,12 +216,10 @@ class TFLiteDetectionEngine @Inject constructor(
         analysisExecutor.execute {
             try {
                 if (!isRunning || isPaused) return@execute
-                synchronized(this) {
                     if (poseLandmarkerHelper != null) {
                         runPoseLandmarkerInference(bitmap)
                     } else {
                         android.util.Log.w("TFLite", "processBitmap: no PoseLandmarker available")
-                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("TFLite", "processBitmap error: ${e.message}", e)
@@ -237,29 +235,10 @@ class TFLiteDetectionEngine @Inject constructor(
         val inferenceStart = System.currentTimeMillis()
         android.util.Log.d("TFLite", "runPoseLandmarkerInference called, bitmap=${bitmap.width}x${bitmap.height}")
 
-        // Camera sensor outputs landscape images by default. Rotate to portrait
-        // so that the person appears upright in the bitmap passed to MediaPipe.
-        val processedBitmap = if (bitmap.width > bitmap.height) {
-            // Back camera (sensor orientation=90): rotate +90° clockwise
-            // Front camera (sensor orientation=270): rotate +270° clockwise
-            val rotationAngle = if (isFrontCamera) 270f else 90f
-            android.util.Log.d("TFLite", "Rotating bitmap: isFrontCamera=$isFrontCamera, angle=$rotationAngle, bitmap=${bitmap.width}x${bitmap.height}")
-            val matrix = android.graphics.Matrix().apply { postRotate(rotationAngle) }
-            Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
-        } else {
-            android.util.Log.d("TFLite", "No rotation needed: bitmap=${bitmap.width}x${bitmap.height}")
-            bitmap
-        }
-
         val detectStart = System.currentTimeMillis()
-        val result = poseLandmarkerHelper?.detect(processedBitmap)
+        val result = poseLandmarkerHelper?.detect(bitmap, detectStart)
         val detectTime = System.currentTimeMillis() - detectStart
         android.util.Log.d("TFLite", "PoseLandmarker detect took ${detectTime}ms")
-
-        // Clean up rotated bitmap if we created one (original will be recycled by caller)
-        if (processedBitmap !== bitmap && !processedBitmap.isRecycled) {
-            processedBitmap.recycle()
-        }
 
         if (result == null || result.landmarks().isEmpty()) {
             android.util.Log.d("TFLite", "No person detected by PoseLandmarker")
@@ -292,18 +271,24 @@ class TFLiteDetectionEngine @Inject constructor(
         _fps.value = fpsTimestamps.size
 
         // Apply smoothing to reduce jitter
-        val smoothedKeypoints = if (previousKeypoints == null) {
-            previousKeypoints = keypoints.map { it.copyOf() }.toTypedArray()
+        val prev = previousKeypoints
+        val smoothedKeypoints = if (prev == null) {
+            val newPrev = Array(keypoints.size) { FloatArray(3) }
+            for (i in keypoints.indices) {
+                newPrev[i][0] = keypoints[i][0]
+                newPrev[i][1] = keypoints[i][1]
+                newPrev[i][2] = keypoints[i][2]
+            }
+            previousKeypoints = newPrev
             keypoints
         } else {
-            val result = Array(keypoints.size) { FloatArray(3) }
             for (i in keypoints.indices) {
-                result[i][0] = smoothingAlpha * keypoints[i][0] + (1 - smoothingAlpha) * previousKeypoints!![i][0]
-                result[i][1] = smoothingAlpha * keypoints[i][1] + (1 - smoothingAlpha) * previousKeypoints!![i][1]
-                result[i][2] = keypoints[i][2] // Use current confidence
+                prev[i][0] = smoothingAlpha * keypoints[i][0] + (1 - smoothingAlpha) * prev[i][0]
+                prev[i][1] = smoothingAlpha * keypoints[i][1] + (1 - smoothingAlpha) * prev[i][1]
+                prev[i][2] = keypoints[i][2]
             }
-            previousKeypoints = result.map { it.copyOf() }.toTypedArray()
-            result
+            previousKeypoints = prev
+            prev
         }
 
         // Store keypoints for visualization
