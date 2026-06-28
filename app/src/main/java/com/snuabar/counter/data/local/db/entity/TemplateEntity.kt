@@ -16,6 +16,8 @@ data class TemplateEntity(
     val targetSeconds: Int? = null, // 计时模式的目标秒数
     val mediaPath: String? = null,
     val featureVector: ByteArray? = null,
+    val keypointSequence: ByteArray? = null,
     val threshold: Float = 0.7f,
+    val poseType: String = "UNKNOWN", // STANDING, PRONE, SUPINE, UNKNOWN
     val createdAt: Long = System.currentTimeMillis()
 )

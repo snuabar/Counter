@@ -1,6 +1,10 @@
 package com.snuabar.counter.ui.screen.template
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,13 +14,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Stop
@@ -36,13 +43,22 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -50,7 +66,10 @@ import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.SessionMode
 import com.snuabar.counter.domain.model.Template
 import com.snuabar.counter.domain.model.TemplateType
+import com.snuabar.counter.ui.component.CountdownOverlay
 import com.snuabar.counter.ui.component.PoseCameraPreview
+import com.snuabar.counter.ui.component.SkeletonAnimationPreview
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +78,8 @@ fun TemplateScreen(
 ) {
     val templates by viewModel.templates.collectAsState()
     val showDialog by viewModel.showAddTemplateDialog.collectAsState()
+    val showEditDialog by viewModel.showEditTemplateDialog.collectAsState()
+    val editingTemplateId by viewModel.editingTemplateId.collectAsState()
     val newTemplateName by viewModel.newTemplateName.collectAsState()
     val selectedSensorType by viewModel.selectedSensorType.collectAsState()
     val selectedSessionMode by viewModel.selectedSessionMode.collectAsState()
@@ -69,13 +90,35 @@ fun TemplateScreen(
     val recordTargetFrames by viewModel.recordTargetFrames.collectAsState()
     val recordingTemplateName by viewModel.recordingTemplateName.collectAsState()
 
+    val isRecordingComplete by viewModel.isRecordingComplete.collectAsState()
+
+    // Expanded template ID for swipe-to-delete
+    var expandedTemplateId by remember { mutableStateOf<Long?>(null) }
+
+    val listState = rememberLazyListState()
+
+    // Auto collapse swipe-to-delete when scrolling
+    if (listState.isScrollInProgress && expandedTemplateId != null) {
+        expandedTemplateId = null
+    }
+
+    // Auto collapse when recording starts
+    LaunchedEffect(isRecording) {
+        if (isRecording) {
+            expandedTemplateId = null
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("模板管理") },
                 actions = {
                     if (!isRecording) {
-                        IconButton(onClick = { viewModel.setShowAddTemplateDialog(true) }) {
+                        IconButton(onClick = {
+                            expandedTemplateId = null
+                            viewModel.setShowAddTemplateDialog(true)
+                        }) {
                             Icon(Icons.Default.Add, contentDescription = "添加模板")
                         }
                     }
@@ -96,6 +139,7 @@ fun TemplateScreen(
                     countdownSeconds = countdownSeconds,
                     progress = recordProgress,
                     targetFrames = recordTargetFrames,
+                    isRecordingComplete = isRecordingComplete,
                     onStop = {
                         viewModel.stopRecording(
                             onSuccess = { /* template saved */ },
@@ -113,15 +157,20 @@ fun TemplateScreen(
             } else if (templates.isNotEmpty()) {
                 TemplateList(
                     templates = templates,
+                    expandedTemplateId = expandedTemplateId,
+                    onExpandChanged = { expandedTemplateId = it },
+                    onClickTemplate = { viewModel.startEditTemplate(it) },
                     onDelete = { viewModel.deleteTemplate(it) },
-                    onRecord = { id, name -> viewModel.startRecordingForTemplate(id, name) },
-                    enabled = !isRecording
+                    enabled = !isRecording,
+                    listState = listState
                 )
             }
         }
 
         if (showDialog) {
             AddTemplateDialog(
+                title = "添加模板",
+                confirmText = "添加",
                 name = newTemplateName,
                 sensorType = selectedSensorType,
                 sessionMode = selectedSessionMode,
@@ -136,6 +185,26 @@ fun TemplateScreen(
                 onDismiss = { viewModel.setShowAddTemplateDialog(false) }
             )
         }
+
+        val editingTemplate = templates.find { it.id == editingTemplateId }
+        if (showEditDialog && editingTemplate != null) {
+            TemplateEditDialog(
+                template = editingTemplate,
+                editingName = newTemplateName,
+                onNameChange = { viewModel.setNewTemplateName(it) },
+                onReRecord = {
+                    viewModel.cancelEditTemplate()
+                    viewModel.startRecordingForTemplate(editingTemplate.id, editingTemplate.name)
+                },
+                onSave = {
+                    editingTemplateId?.let { id ->
+                        viewModel.updateTemplateName(id, newTemplateName)
+                    }
+                    viewModel.cancelEditTemplate()
+                },
+                onDismiss = { viewModel.cancelEditTemplate() }
+            )
+        }
     }
 }
 
@@ -145,6 +214,7 @@ private fun RecordingPanel(
     templateName: String,
     isCountingDown: Boolean,
     countdownSeconds: Int,
+    isRecordingComplete: Boolean,
     progress: Int,
     targetFrames: Int,
     onStop: () -> Unit,
@@ -154,6 +224,8 @@ private fun RecordingPanel(
     val keypoints by viewModel.keypoints.collectAsState()
     val fps by viewModel.fps.collectAsState()
     val isRecording by viewModel.isRecording.collectAsState()
+
+    val isRecordingComplete by viewModel.isRecordingComplete.collectAsState()
 
     // Camera selection state
     val isFrontCamera by viewModel.isFrontCamera.collectAsState()
@@ -181,38 +253,55 @@ private fun RecordingPanel(
             )
             // Recording / Countdown indicator
             if (isCountingDown) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .align(Alignment.Center),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "$countdownSeconds",
-                        style = MaterialTheme.typography.displayLarge.copy(
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 120.sp
-                        ),
-                        modifier = Modifier.padding(bottom = 80.dp)
-                    )
-                    Text(
-                        text = "请退后，全身入镜",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        ),
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp)
+                CountdownOverlay(
+                    seconds = countdownSeconds,
+                    message = "请退后，全身入镜",
+                    onCancel = onCancel
+                )
+            } else {
+                if (isRecordingComplete) {
+                    // Recording complete overlay
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .align(Alignment.Center),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = "录制完成",
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(120.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "录制完成",
+                                style = MaterialTheme.typography.displayMedium.copy(
+                                    color = Color(0xFF4CAF50),
+                                    fontSize = 48.sp
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "可以停止动作了",
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    color = Color.White
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.FiberManualRecord,
+                        contentDescription = "录制中",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(16.dp)
+                            .size(32.dp)
                     )
                 }
-            } else {
-                Icon(
-                    imageVector = Icons.Default.FiberManualRecord,
-                    contentDescription = "录制中",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                        .size(32.dp)
-                )
             }
         }
 
@@ -242,15 +331,15 @@ private fun RecordingPanel(
                     }
                 } else {
                     Text(
-                        text = "正在录制: $templateName",
+                        text = if (isRecordingComplete) "✓ 录制完成" else "正在录制: $templateName",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "帧数: $progress / $targetFrames",
+                        text = if (isRecordingComplete) "可以停止动作了" else "帧数: $progress / $targetFrames",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    if (targetFrames > 0) {
+                    if (targetFrames > 0 && !isRecordingComplete) {
                         LinearProgressIndicator(
                             progress = (progress.toFloat() / targetFrames.toFloat()).coerceIn(0f, 1f),
                             modifier = Modifier
@@ -298,20 +387,28 @@ private fun EmptyTemplateState() {
 @Composable
 private fun TemplateList(
     templates: List<Template>,
+    expandedTemplateId: Long?,
+    onExpandChanged: (Long?) -> Unit,
+    onClickTemplate: (Template) -> Unit,
     onDelete: (Long) -> Unit,
-    onRecord: (Long, String) -> Unit,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    listState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState()
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
+        state = listState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(templates) { template ->
             TemplateItem(
                 template = template,
+                isExpanded = expandedTemplateId == template.id,
+                onExpandChanged = { expanded ->
+                    onExpandChanged(if (expanded) template.id else null)
+                },
+                onClick = { onClickTemplate(template) },
                 onDelete = { onDelete(template.id) },
-                onRecord = { onRecord(template.id, template.name) },
                 enabled = enabled
             )
         }
@@ -321,55 +418,111 @@ private fun TemplateList(
 @Composable
 private fun TemplateItem(
     template: Template,
-    onDelete: () -> Unit = {},
-    onRecord: () -> Unit = {},
+    isExpanded: Boolean,
+    onExpandChanged: (Boolean) -> Unit,
+    onClick: () -> Unit,
+    onDelete: () -> Unit,
     enabled: Boolean = true
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .then(if (!enabled) Modifier.alpha(0.5f) else Modifier),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = template.name + if (template.mode == SessionMode.TIMER) " (计时)" else "",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    text = "${if (template.type == TemplateType.BUILTIN) "内置" else "自定义"} · ${if (template.sensorType == SensorType.VISION) "视觉" else "音频"} · ${if (template.mode == SessionMode.TIMER) "计时" else "计数"}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline
-                )
-                if (template.featureVector != null) {
-                    Text(
-                        text = "已录制特征向量",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+    val isCustom = template.type == TemplateType.CUSTOM
+    val scope = rememberCoroutineScope()
+    val offsetX = remember { Animatable(0f) }
+    val maxSwipePx = with(LocalDensity.current) { 80.dp.toPx() }
+
+    LaunchedEffect(isExpanded) {
+        val target = if (isExpanded) -maxSwipePx else 0f
+        if (kotlin.math.abs(offsetX.value - target) > 1f) {
+            offsetX.animateTo(target)
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Background layer (red delete area) - only for custom templates
+        if (isCustom) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(MaterialTheme.colorScheme.error, shape = MaterialTheme.shapes.medium),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                IconButton(
+                    onClick = {
+                        onExpandChanged(false)
+                        onDelete()
+                    },
+                    modifier = Modifier.padding(end = 16.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "删除",
+                        tint = MaterialTheme.colorScheme.onError
                     )
                 }
             }
-            Row {
-                // Record button for custom templates without feature vector
-                if (template.type == TemplateType.CUSTOM && template.featureVector == null && enabled) {
-                    IconButton(onClick = onRecord) {
-                        Icon(
-                            imageVector = Icons.Default.FiberManualRecord,
-                            contentDescription = "录制模板",
-                            tint = MaterialTheme.colorScheme.error
-                        )
+        }
+
+        // Foreground layer (card content)
+        val cardModifier = if (isCustom) {
+            Modifier
+                .fillMaxWidth()
+                .offset { IntOffset(offsetX.value.toInt(), 0) }
+                .pointerInput(Unit) {
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            scope.launch {
+                                if (offsetX.value < -maxSwipePx / 2) {
+                                    offsetX.animateTo(-maxSwipePx)
+                                    onExpandChanged(true)
+                                } else {
+                                    offsetX.animateTo(0f)
+                                    onExpandChanged(false)
+                                }
+                            }
+                        },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            val newOffset = (offsetX.value + dragAmount).coerceIn(-maxSwipePx, 0f)
+                            scope.launch { offsetX.snapTo(newOffset) }
+                        }
+                    )
+                }
+        } else {
+            Modifier.fillMaxWidth()
+        }
+
+        Card(
+            modifier = cardModifier
+                .clickable {
+                    if (isExpanded) {
+                        onExpandChanged(false)
+                    } else {
+                        onClick()
                     }
                 }
-                // Delete button for custom templates
-                if (template.type == TemplateType.CUSTOM && enabled) {
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "删除模板",
-                            tint = MaterialTheme.colorScheme.error
+                .then(if (!enabled) Modifier.alpha(0.5f) else Modifier)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = template.name + if (template.mode == SessionMode.TIMER) " (计时)" else "",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "${if (template.type == TemplateType.BUILTIN) "内置" else "自定义"} · ${if (template.sensorType == SensorType.VISION) "视觉" else "音频"} · ${if (template.mode == SessionMode.TIMER) "计时" else "计数"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    if (template.featureVector != null) {
+                        Text(
+                            text = "已录制特征向量",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
@@ -381,6 +534,8 @@ private fun TemplateItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddTemplateDialog(
+    title: String,
+    confirmText: String,
     name: String,
     sensorType: SensorType,
     sessionMode: SessionMode,
@@ -392,7 +547,7 @@ private fun AddTemplateDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("添加模板") },
+        title = { Text(title) },
         text = {
             Column {
                 OutlinedTextField(
@@ -429,7 +584,90 @@ private fun AddTemplateDialog(
         },
         confirmButton = {
             TextButton(onClick = onConfirm, enabled = name.isNotBlank()) {
-                Text("添加")
+                Text(confirmText)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("取消")
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TemplateEditDialog(
+    template: Template,
+    editingName: String,
+    onNameChange: (String) -> Unit,
+    onReRecord: () -> Unit,
+    onSave: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑模板") },
+        text = {
+            Column {
+                // Skeleton animation preview
+                if (template.keypointSequence != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .background(Color.Black, shape = MaterialTheme.shapes.medium),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        SkeletonAnimationPreview(
+                            keypointSequence = template.keypointSequence,
+                            modifier = Modifier.fillMaxSize(),
+                            frameDelayMs = 100
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+
+                // Name field (editable)
+                OutlinedTextField(
+                    value = editingName,
+                    onValueChange = onNameChange,
+                    label = { Text("模板名称") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Sensor type (read-only)
+                Text(
+                    text = "传感器: ${if (template.sensorType == SensorType.VISION) "视觉" else "音频"}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                // Mode (read-only)
+                Text(
+                    text = "模式: ${if (template.mode == SessionMode.TIMER) "计时" else "计数"}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.outline
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Re-record button
+                OutlinedButton(
+                    onClick = onReRecord,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.FiberManualRecord, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("重新录制")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onSave) {
+                Text("保存")
             }
         },
         dismissButton = {

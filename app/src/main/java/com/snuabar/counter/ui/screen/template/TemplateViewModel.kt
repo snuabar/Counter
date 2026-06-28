@@ -40,6 +40,12 @@ class TemplateViewModel @Inject constructor(
     private val _showAddTemplateDialog = MutableStateFlow(false)
     val showAddTemplateDialog: StateFlow<Boolean> = _showAddTemplateDialog.asStateFlow()
 
+    private val _showEditTemplateDialog = MutableStateFlow(false)
+    val showEditTemplateDialog: StateFlow<Boolean> = _showEditTemplateDialog.asStateFlow()
+
+    private val _editingTemplateId = MutableStateFlow<Long?>(null)
+    val editingTemplateId: StateFlow<Long?> = _editingTemplateId.asStateFlow()
+
     private val _newTemplateName = MutableStateFlow("")
     val newTemplateName: StateFlow<String> = _newTemplateName.asStateFlow()
 
@@ -67,6 +73,9 @@ class TemplateViewModel @Inject constructor(
 
     private val _recordingTemplateName = MutableStateFlow("")
     val recordingTemplateName: StateFlow<String> = _recordingTemplateName.asStateFlow()
+
+    private val _isRecordingComplete = MutableStateFlow(false)
+    val isRecordingComplete: StateFlow<Boolean> = _isRecordingComplete.asStateFlow()
 
     // Keypoints for visualization
     private val _keypoints = MutableStateFlow<Array<FloatArray>?>(null)
@@ -248,9 +257,11 @@ class TemplateViewModel @Inject constructor(
                 sensorType = sensorType,
                 mode = mode
             )
-            templateRepository.createTemplate(template)
+            val templateId = templateRepository.createTemplate(template)
             _showAddTemplateDialog.value = false
             _newTemplateName.value = ""
+            // 自动进入录制画面
+            startRecordingForTemplate(templateId, name)
         }
     }
 
@@ -258,6 +269,50 @@ class TemplateViewModel @Inject constructor(
         viewModelScope.launch {
             templateRepository.deleteTemplate(templateId)
         }
+    }
+
+    fun startEditTemplate(template: Template) {
+        _editingTemplateId.value = template.id
+        _newTemplateName.value = template.name
+        _selectedSensorType.value = template.sensorType
+        _selectedSessionMode.value = template.mode
+        _showEditTemplateDialog.value = true
+    }
+
+    fun updateTemplate(templateId: Long, name: String, sensorType: SensorType, mode: SessionMode) {
+        viewModelScope.launch {
+            val existing = templateRepository.getTemplate(templateId)
+            if (existing != null) {
+                val updated = existing.copy(
+                    name = name,
+                    sensorType = sensorType,
+                    mode = mode
+                )
+                templateRepository.createTemplate(updated)
+            }
+            _showEditTemplateDialog.value = false
+            _editingTemplateId.value = null
+            _newTemplateName.value = ""
+        }
+    }
+
+    fun updateTemplateName(templateId: Long, name: String) {
+        viewModelScope.launch {
+            val existing = templateRepository.getTemplate(templateId)
+            if (existing != null) {
+                val updated = existing.copy(name = name)
+                templateRepository.createTemplate(updated)
+            }
+            _showEditTemplateDialog.value = false
+            _editingTemplateId.value = null
+            _newTemplateName.value = ""
+        }
+    }
+
+    fun cancelEditTemplate() {
+        _showEditTemplateDialog.value = false
+        _editingTemplateId.value = null
+        _newTemplateName.value = ""
     }
 
     fun setShowAddTemplateDialog(show: Boolean) {
@@ -386,6 +441,7 @@ class TemplateViewModel @Inject constructor(
 
         _recordingTemplateName.value = templateName
         _isRecording.value = true
+        _isRecordingComplete.value = false
         _recordProgress.value = 0
         _recordTargetFrames.value = durationSeconds * 10
 
@@ -406,6 +462,7 @@ class TemplateViewModel @Inject constructor(
             recorder.onProgressUpdate = { current, target ->
                 _recordProgress.value = current
                 _recordTargetFrames.value = target
+                _isRecordingComplete.value = (current >= target)
             }
             recorder.startRecording(durationSeconds)
             templateRecorder = recorder
@@ -450,11 +507,15 @@ class TemplateViewModel @Inject constructor(
                     userId = userId
                 )
                 if (template != null) {
+                    android.util.Log.d("TemplateViewModel", "Template built: name=$templateName, featureVector=${template.featureVector?.size ?: 0} bytes, frames=${templateRecorder?.recordedFrames ?: 0}")
                     if (existingId != null) {
                         // Update existing template with feature vector
                         val existing = templateRepository.getTemplate(existingId)
                         if (existing != null) {
-                            val updated = existing.copy(featureVector = template.featureVector)
+                            val updated = existing.copy(
+                                featureVector = template.featureVector,
+                                keypointSequence = template.keypointSequence
+                            )
                             templateRepository.createTemplate(updated)
                         }
                     } else {
@@ -493,6 +554,7 @@ class TemplateViewModel @Inject constructor(
         templateRecorder = null
         _isRecording.value = false
         _isCountingDown.value = false
+        _isRecordingComplete.value = false
         _countdownSeconds.value = 5
         _recordProgress.value = 0
         _recordTargetFrames.value = 0

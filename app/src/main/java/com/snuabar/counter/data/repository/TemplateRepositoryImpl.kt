@@ -7,6 +7,7 @@ import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.SessionMode
 import com.snuabar.counter.domain.model.Template
 import com.snuabar.counter.domain.model.TemplateType
+import com.snuabar.counter.domain.model.PoseType
 import com.snuabar.counter.domain.repository.TemplateRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -52,7 +53,9 @@ class TemplateRepositoryImpl @Inject constructor(
         targetSeconds = targetSeconds,
         mediaPath = mediaPath,
         featureVector = featureVector,
+        keypointSequence = keypointSequence,
         threshold = threshold,
+        poseType = poseType.name,
         createdAt = createdAt
     )
 
@@ -67,7 +70,9 @@ class TemplateRepositoryImpl @Inject constructor(
         targetSeconds = targetSeconds,
         mediaPath = mediaPath,
         featureVector = featureVector,
+        keypointSequence = keypointSequence,
         threshold = threshold,
+        poseType = PoseType.valueOf(poseType),
         createdAt = createdAt
     )
 }

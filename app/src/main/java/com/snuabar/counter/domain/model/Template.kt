@@ -13,6 +13,8 @@ data class Template(
     val targetSeconds: Int? = null,
     val mediaPath: String? = null,
     val featureVector: ByteArray? = null,
+    val keypointSequence: ByteArray? = null, // 原始关键点序列，用于预览动画
     val threshold: Float = 0.7f,
+    val poseType: PoseType = PoseType.UNKNOWN,
     val createdAt: Long = System.currentTimeMillis()
 )

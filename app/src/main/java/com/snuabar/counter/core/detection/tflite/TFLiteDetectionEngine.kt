@@ -17,8 +17,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 /**
@@ -52,9 +54,14 @@ class TFLiteDetectionEngine @Inject constructor(
     private var isPaused = false
     private var count = 0
 
-    // Smoothing state to reduce jitter
+    // Smoothing state to reduce jitter (higher = more responsive to fast movements)
     private var previousKeypoints: Array<FloatArray>? = null
-    private val smoothingAlpha = 0.4f
+    private val smoothingAlpha = 1.0f
+
+    // Debug stats for frame dropping analysis
+    private var frameSubmitCount = 0L
+    private var frameDropCount = 0L
+    private var lastStatsLogTime = 0L
 
     override fun isRunning(): Boolean = isRunning
 
@@ -72,15 +79,14 @@ class TFLiteDetectionEngine @Inject constructor(
     private var actionDetector: PoseActionDetector? = null
     private var currentActionType: ActionType = ActionType.CUSTOM
 
-    // Async analysis executor to avoid blocking the caller thread
-    // Queue size=1: discard old tasks, always process the latest frame
+    // Async analysis executor: single-threaded, always processes the latest frame
+    // isAnalyzing flag drops old frames while inference is in progress
     private var analysisExecutor = ThreadPoolExecutor(
         1, 1, 0L, TimeUnit.MILLISECONDS,
         LinkedBlockingQueue(1),
         ThreadPoolExecutor.DiscardPolicy()
     )
-    @Volatile
-    private var isAnalyzing = false
+    private val isAnalyzing = AtomicBoolean(false)
 
     override fun start(config: DetectionConfig) {
         if (isRunning) {
@@ -109,6 +115,7 @@ class TFLiteDetectionEngine @Inject constructor(
                 ThreadPoolExecutor.DiscardPolicy()
             )
         }
+        isAnalyzing.set(false)
 
         // Load PoseLandmarker model
         initPoseLandmarker(config.poseModelConfig.fileName)
@@ -137,6 +144,7 @@ class TFLiteDetectionEngine @Inject constructor(
                 ThreadPoolExecutor.DiscardPolicy()
             )
         }
+        isAnalyzing.set(false)
 
         initPoseLandmarker(config.poseModelConfig.fileName)
         // No action detector - just inference for skeleton
@@ -180,6 +188,7 @@ class TFLiteDetectionEngine @Inject constructor(
         _keypoints.value = null
         previousKeypoints = null
         analysisExecutor.shutdownNow()
+        isAnalyzing.set(false)
     }
 
     /**
@@ -198,7 +207,8 @@ class TFLiteDetectionEngine @Inject constructor(
 
     /**
      * Process a bitmap directly (for Camera2 or other sources).
-     * Runs inference asynchronously on analysisExecutor to avoid blocking the caller thread.
+     * Only one frame is analyzed at a time: if the previous frame is still being
+     * processed, new frames are dropped and the latest frame is processed next.
      */
     fun processBitmap(bitmap: Bitmap) {
         if (!isRunning || isPaused) {
@@ -206,62 +216,68 @@ class TFLiteDetectionEngine @Inject constructor(
             return
         }
 
-        // Check if executor queue is full to avoid memory pressure
-        if (analysisExecutor.queue.remainingCapacity() <= 0) {
-            android.util.Log.w("TFLite", "Executor queue full, dropping frame")
+        // Atomic check: only one analysis task at a time
+        if (!isAnalyzing.compareAndSet(false, true)) {
+            frameDropCount++
+            logFrameStats("dropped")
             if (!bitmap.isRecycled) bitmap.recycle()
             return
         }
 
-        analysisExecutor.execute {
-            try {
-                if (!isRunning || isPaused) return@execute
+        frameSubmitCount++
+        logFrameStats("submitted")
+
+        try {
+            analysisExecutor.execute {
+                try {
+                    if (!isRunning || isPaused) return@execute
                     if (poseLandmarkerHelper != null) {
                         runPoseLandmarkerInference(bitmap)
                     } else {
                         android.util.Log.w("TFLite", "processBitmap: no PoseLandmarker available")
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("TFLite", "processBitmap error: ${e.message}", e)
-            } finally {
-                if (!bitmap.isRecycled) {
-                    bitmap.recycle()
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("TFLite", "processBitmap error: ${e.message}", e)
+                } finally {
+                    if (!bitmap.isRecycled) {
+                        bitmap.recycle()
+                    }
+                    isAnalyzing.set(false)
                 }
             }
+        } catch (e: RejectedExecutionException) {
+            isAnalyzing.set(false)
+            if (!bitmap.isRecycled) bitmap.recycle()
         }
     }
 
     private fun runPoseLandmarkerInference(bitmap: Bitmap) {
-        val inferenceStart = System.currentTimeMillis()
-        android.util.Log.d("TFLite", "runPoseLandmarkerInference called, bitmap=${bitmap.width}x${bitmap.height}")
+        val startTime = System.currentTimeMillis()
 
-        val detectStart = System.currentTimeMillis()
-        val result = poseLandmarkerHelper?.detect(bitmap, detectStart)
-        val detectTime = System.currentTimeMillis() - detectStart
-        android.util.Log.d("TFLite", "PoseLandmarker detect took ${detectTime}ms")
+        val result = poseLandmarkerHelper?.detect(bitmap, System.currentTimeMillis())
+        val inferenceTime = System.currentTimeMillis() - startTime
+
+        if (inferenceTime > 50) {
+            android.util.Log.w("TFLite-Lag", "Slow inference: ${inferenceTime}ms, bitmap=${bitmap.width}x${bitmap.height}")
+        } else {
+            android.util.Log.d("TFLite-Lag", "Inference: ${inferenceTime}ms, bitmap=${bitmap.width}x${bitmap.height}")
+        }
 
         if (result == null || result.landmarks().isEmpty()) {
-            android.util.Log.d("TFLite", "No person detected by PoseLandmarker")
             return
         }
 
         // Get first person's 33 landmarks
         val landmarks33 = result.landmarks()[0]
-        android.util.Log.d("TFLite", "PoseLandmarker returned ${landmarks33.size} landmarks")
 
         // Map 33 MediaPipe landmarks to 17 COCO keypoints
         val keypoints17 = mapMediaPipe33ToCoco17(landmarks33)
-        android.util.Log.d("TFLite", "mapMediaPipe33ToCoco17 returned ${keypoints17.size} keypoints")
 
         // Process as usual
         processKeypoints(keypoints17)
-        val totalTime = System.currentTimeMillis() - inferenceStart
-        android.util.Log.d("TFLite", "Total inference pipeline took ${totalTime}ms")
     }
 
     private fun processKeypoints(keypoints: Array<FloatArray>) {
-        android.util.Log.d("TFLite", "processKeypoints: ${keypoints.size} keypoints, first=${keypoints.firstOrNull()?.contentToString()}")
-
         // Update FPS counter
         val now = System.currentTimeMillis()
         fpsTimestamps.addLast(now)
@@ -355,5 +371,15 @@ class TFLiteDetectionEngine @Inject constructor(
         coco17[16] = floatArrayOf(landmarks[28].x(), landmarks[28].y(), landmarks[28].visibility().orElse(0f)) // right_ankle
 
         return coco17
+    }
+
+    private fun logFrameStats(action: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastStatsLogTime > 2000) {
+            val total = frameSubmitCount + frameDropCount
+            val dropRate = if (total > 0) (frameDropCount * 100f / total) else 0f
+            android.util.Log.w("TFLite-Lag", "Frame stats [$action]: submitted=$frameSubmitCount, dropped=$frameDropCount, dropRate=${"%.1f".format(dropRate)}%")
+            lastStatsLogTime = now
+        }
     }
 }

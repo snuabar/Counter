@@ -3,6 +3,8 @@ package com.snuabar.counter.core.template
 import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.Template
 import com.snuabar.counter.domain.model.TemplateType
+import com.snuabar.counter.domain.model.PoseType
+import com.snuabar.counter.domain.model.PoseDetector
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -20,12 +22,15 @@ class TemplateRecorder {
     private var isRecording = false
     private var targetFrames = 0
     private val collectedFeatures = mutableListOf<FloatArray>()
+    private val collectedPoseTypes = mutableListOf<PoseType>()
+    private val collectedRawKeypoints = mutableListOf<Array<FloatArray>>()
 
     // Progress callback: (currentFrame, targetFrames)
     var onProgressUpdate: ((Int, Int) -> Unit)? = null
 
     fun startRecording(durationSeconds: Int, fps: Int = 10) {
         collectedFeatures.clear()
+        collectedRawKeypoints.clear()
         lastRecordedFeatures = null
         targetFrames = durationSeconds * fps
         isRecording = true
@@ -44,6 +49,10 @@ class TemplateRecorder {
 
         val features = extractAngleFeatures(keypoints) ?: return
 
+        // Detect pose from keypoints
+        val pose = PoseDetector.detectPose(keypoints)
+        collectedPoseTypes.add(pose)
+
         // Real-time motion detection: skip frames where the person is not moving enough.
         // This prevents the progress bar from advancing when standing still.
         val last = lastRecordedFeatures
@@ -57,6 +66,7 @@ class TemplateRecorder {
 
         lastRecordedFeatures = features.copyOf()
         collectedFeatures.add(features)
+        collectedRawKeypoints.add(keypoints.map { it.copyOf() }.toTypedArray())
         onProgressUpdate?.invoke(collectedFeatures.size, targetFrames)
     }
 
@@ -81,9 +91,8 @@ class TemplateRecorder {
         if (collectedFeatures.isEmpty()) return null
 
         // Extract the best segment (highest motion) to remove "dead frames"
-        // where the user is walking to/from the phone. This keeps only the
-        // frames where the actual action is happening.
-        val bestFeatures = extractBestSegment(collectedFeatures)
+        val (bestStart, windowSize) = extractBestSegmentIndices(collectedFeatures)
+        val bestFeatures = collectedFeatures.subList(bestStart, bestStart + windowSize)
 
         // Check template quality: motion score
         val motionScore = computeMotionScore(bestFeatures)
@@ -97,32 +106,41 @@ class TemplateRecorder {
         // Encode the best segment as ByteArray
         val featureBytes = encodeFeatureSequence(bestFeatures)
 
+        // Encode the raw keypoints for preview animation
+        val bestKeypoints = collectedRawKeypoints.subList(bestStart, bestStart + windowSize)
+        val keypointBytes = encodeKeypointSequence(bestKeypoints)
+
+        // Determine the most common pose type from recorded frames
+        val detectedPoseType = if (collectedPoseTypes.isNotEmpty()) {
+            collectedPoseTypes.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: PoseType.UNKNOWN
+        } else {
+            PoseType.UNKNOWN
+        }
+
         return Template(
             userId = userId,
             name = name,
             type = TemplateType.CUSTOM,
             sensorType = SensorType.VISION,
             featureVector = featureBytes,
-            threshold = threshold
+            keypointSequence = keypointBytes,
+            threshold = threshold,
+            poseType = detectedPoseType
         )
     }
 
     /**
      * Extract the best segment (highest motion) from the recorded frames.
-     * This removes "dead frames" at the beginning and end where the user
-     * is walking to/from the phone.
-     *
-     * Uses a sliding window to find the segment with the highest motion score.
-     * The window size is 70% of the total frames (e.g., 21 frames out of 30).
+     * Returns Pair(startIndex, windowSize) for both features and raw keypoints.
      */
-    private fun extractBestSegment(features: List<FloatArray>): List<FloatArray> {
-        if (features.size < 10) return features
+    private fun extractBestSegmentIndices(features: List<FloatArray>): Pair<Int, Int> {
+        if (features.size < 10) return Pair(0, features.size)
 
         val totalFrames = features.size
         // Window size: 70% of total frames, at least 10 frames
         val windowSize = kotlin.math.max(10, (totalFrames * 0.7).toInt())
 
-        if (windowSize >= totalFrames) return features
+        if (windowSize >= totalFrames) return Pair(0, totalFrames)
 
         var bestScore = -1f
         var bestStart = 0
@@ -137,7 +155,7 @@ class TemplateRecorder {
             }
         }
 
-        return features.subList(bestStart, bestStart + windowSize)
+        return Pair(bestStart, windowSize)
     }
 
     /**
@@ -172,6 +190,8 @@ class TemplateRecorder {
     fun cancelRecording() {
         isRecording = false
         collectedFeatures.clear()
+        collectedPoseTypes.clear()
+        collectedRawKeypoints.clear()
         lastRecordedFeatures = null
     }
 
@@ -223,6 +243,16 @@ class TemplateRecorder {
         // Hip center vertical position: helps distinguish squat from side-to-side movement
         val hipCenterY = (leftHip[1] + rightHip[1]) / 2f
 
+        // Extended features for action differentiation (组合策略)
+        // Feature 9: kneeAngleSum - sum of both knee angles, smaller when squatting deeper
+        val kneeAngleSum = (leftKneeAngle + rightKneeAngle) / 360f
+        // Feature 10: bodyHeight - vertical distance from shoulder center to ankle center
+        val shoulderCenterY = (leftShoulder[1] + rightShoulder[1]) / 2f
+        val ankleCenterY = (leftAnkle[1] + rightAnkle[1]) / 2f
+        val bodyHeight = shoulderCenterY - ankleCenterY
+        // Feature 11: ankleY - average ankle vertical position
+        val ankleY = (leftAnkle[1] + rightAnkle[1]) / 2f
+
         return floatArrayOf(
             leftElbowAngle / 180f,
             rightElbowAngle / 180f,
@@ -232,7 +262,10 @@ class TemplateRecorder {
             rightHipAngle / 180f,
             leftKneeAngle / 180f,
             rightKneeAngle / 180f,
-            hipCenterY // 9th dim: hip center vertical position [0,1]
+            hipCenterY,            // 9th dim: hip center vertical position [0,1]
+            kneeAngleSum,          // 10th dim: knee angle sum [0,1], smaller when deeper squat
+            bodyHeight,            // 11th dim: body height (shoulder to ankle)
+            ankleY                 // 12th dim: average ankle Y position
         )
     }
 
@@ -279,6 +312,39 @@ class TemplateRecorder {
             for (value in frame) {
                 writeFloat(bytes, offset, value)
                 offset += 4
+            }
+        }
+
+        return bytes
+    }
+
+    /**
+     * Encode a sequence of raw keypoints into a ByteArray.
+     * Format: [4 bytes frame count][4 bytes keypoint count per frame][keypoint data...]
+     * Each keypoint: [x, y, confidence] as 3 floats (12 bytes)
+     */
+    private fun encodeKeypointSequence(keypoints: List<Array<FloatArray>>): ByteArray {
+        if (keypoints.isEmpty()) return ByteArray(0)
+
+        val frameCount = keypoints.size
+        val keypointCount = keypoints.first().size
+        val valuesPerKeypoint = 3 // x, y, confidence
+
+        val totalBytes = 8 + frameCount * keypointCount * valuesPerKeypoint * 4
+        val bytes = ByteArray(totalBytes)
+
+        // Write header
+        writeInt(bytes, 0, frameCount)
+        writeInt(bytes, 4, keypointCount)
+
+        // Write data
+        var offset = 8
+        for (frame in keypoints) {
+            for (kp in frame) {
+                for (i in 0 until valuesPerKeypoint) {
+                    writeFloat(bytes, offset, if (i < kp.size) kp[i] else 0f)
+                    offset += 4
+                }
             }
         }
 

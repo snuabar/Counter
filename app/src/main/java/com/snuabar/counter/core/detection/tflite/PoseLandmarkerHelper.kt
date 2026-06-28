@@ -34,11 +34,15 @@ class PoseLandmarkerHelper(
         // Use GPU if enabled and supported, otherwise fallback to CPU
         if (useGpu) {
             poseLandmarker = try {
-                createPoseLandmarker(context, modelFileName, Delegate.GPU)
+                val marker = createPoseLandmarker(context, modelFileName, Delegate.GPU)
+                android.util.Log.i("PoseLandmarker", "GPU delegate ACTIVE for $modelFileName")
+                marker
             } catch (e: Exception) {
                 android.util.Log.w("PoseLandmarker", "GPU delegate not supported or failed, falling back to CPU: ${e.message}")
                 try {
-                    createPoseLandmarker(context, modelFileName, Delegate.CPU)
+                    val marker = createPoseLandmarker(context, modelFileName, Delegate.CPU)
+                    android.util.Log.i("PoseLandmarker", "CPU delegate ACTIVE (GPU fallback) for $modelFileName")
+                    marker
                 } catch (e2: Exception) {
                     android.util.Log.e("PoseLandmarker", "Failed to initialize with CPU delegate: ${e2.message}")
                     null
@@ -46,7 +50,9 @@ class PoseLandmarkerHelper(
             }
         } else {
             poseLandmarker = try {
-                createPoseLandmarker(context, modelFileName, Delegate.CPU)
+                val marker = createPoseLandmarker(context, modelFileName, Delegate.CPU)
+                android.util.Log.i("PoseLandmarker", "CPU delegate ACTIVE (GPU disabled) for $modelFileName")
+                marker
             } catch (e: Exception) {
                 android.util.Log.e("PoseLandmarker", "Failed to initialize with CPU delegate: ${e.message}")
                 null

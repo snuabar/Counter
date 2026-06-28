@@ -2,6 +2,8 @@ package com.snuabar.counter.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.snuabar.counter.data.local.db.CounterDatabase
 import dagger.Module
 import dagger.Provides
@@ -9,6 +11,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE templates ADD COLUMN keypointSequence BLOB")
+    }
+}
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -21,7 +29,9 @@ object DatabaseModule {
             context,
             CounterDatabase::class.java,
             "counter_database"
-        ).fallbackToDestructiveMigration().build()
+        ).addMigrations(MIGRATION_4_5)
+        .fallbackToDestructiveMigration()
+        .build()
     }
 
     @Provides
