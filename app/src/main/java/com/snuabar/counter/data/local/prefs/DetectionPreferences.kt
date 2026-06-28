@@ -25,6 +25,7 @@ class DetectionPreferences @Inject constructor(
         val THRESHOLD = floatPreferencesKey("threshold")
         val POSE_MODEL_CONFIG = stringPreferencesKey("pose_model_config")
         val VOICE_ANNOUNCEMENT = booleanPreferencesKey("voice_announcement")
+        val GPU_ACCELERATION = booleanPreferencesKey("gpu_acceleration")
     }
 
     val thresholdFlow: Flow<Float> = dataStore.data
@@ -63,6 +64,17 @@ class DetectionPreferences @Inject constructor(
     suspend fun setVoiceAnnouncement(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[VOICE_ANNOUNCEMENT] = enabled
+        }
+    }
+
+    val gpuAccelerationFlow: Flow<Boolean> = dataStore.data
+        .map { preferences ->
+            preferences[GPU_ACCELERATION] ?: true
+        }
+
+    suspend fun setGpuAcceleration(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[GPU_ACCELERATION] = enabled
         }
     }
 }

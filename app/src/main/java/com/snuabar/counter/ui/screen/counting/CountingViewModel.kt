@@ -38,6 +38,7 @@ class CountingViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val sessionRepository: CountingSessionRepository,
     private val detectionPreferences: DetectionPreferences,
+    private val cameraPreferences: com.snuabar.counter.data.local.prefs.CameraPreferences,
     private val templateRepository: TemplateRepository,
     private val recordingSession: RecordingSession,
     private val timerStateHolder: TimerStateHolder
@@ -76,7 +77,7 @@ class CountingViewModel @Inject constructor(
     private val _targetSeconds = MutableStateFlow<Int?>(null)
     val targetSeconds: StateFlow<Int?> = _targetSeconds.asStateFlow()
 
-    private val _targetResolution = MutableStateFlow(android.util.Size(640, 480))
+    private val _targetResolution = MutableStateFlow(android.util.Size(640, 360))
     val targetResolution: StateFlow<android.util.Size> = _targetResolution.asStateFlow()
 
     private val _actionType = MutableStateFlow(ActionType.CUSTOM)
@@ -141,12 +142,11 @@ class CountingViewModel @Inject constructor(
                 // Track names to add suffix for duplicates
                 val usedNames = mutableMapOf<String, Int>()
                 
-                fun addCamera(cameraId: String, characteristics: CameraCharacteristics, isPhysical: Boolean = false) {
+                fun addCamera(cameraId: String, characteristics: CameraCharacteristics) {
                     val lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING)
                     val focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                    val sensorSize = characteristics.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
                     
-                    Log.d("CameraDebug", "Camera[$cameraId]: facing=$lensFacing, focal=${focalLengths?.toList()}, sensor=$sensorSize, isPhysical=$isPhysical")
+                    Log.d("CameraDebug", "Camera[$cameraId]: facing=$lensFacing, focal=${focalLengths?.toList()}")
                     
                     // Store lens facing for later use
                     if (lensFacing != null) {
@@ -159,14 +159,13 @@ class CountingViewModel @Inject constructor(
                         else -> "未知"
                     }
                     
-                    val cameraType = if (focalLengths != null && focalLengths.isNotEmpty() && sensorSize != null) {
+                    val cameraType = if (lensFacing == CameraCharacteristics.LENS_FACING_BACK &&
+                        focalLengths != null && focalLengths.isNotEmpty()) {
                         val focalLength = focalLengths[0]
-                        val equivalentFocal = focalLength * (36.0f / sensorSize.width)
+                        // Use actual focal length thresholds for mobile cameras
                         when {
-                            equivalentFocal < 20f -> "超广角"
-                            equivalentFocal < 35f -> "广角"
-                            equivalentFocal < 70f -> "标准"
-                            equivalentFocal < 120f -> "中长焦"
+                            focalLength < 4f -> "超广角"
+                            focalLength < 7f -> "广角"
                             else -> "长焦"
                         }
                     } else {
@@ -182,38 +181,65 @@ class CountingViewModel @Inject constructor(
                     // Add suffix if duplicate name exists
                     val count = usedNames.getOrDefault(baseName, 0)
                     usedNames[baseName] = count + 1
-                    val displayName = if (count > 0) "$baseName ${count + 1} [$cameraId]" else "$baseName [$cameraId]"
+                    val displayName = if (count > 0) "$baseName ${count + 1}" else baseName
                     
                     cameraInfo[cameraId] = displayName
                 }
                 
                 for (cameraId in cameraManager.cameraIdList) {
-                    val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-                    // LOGICAL_MULTI_CAMERA_PHYSICAL_IDS key
-                    val physicalIdsKey = android.hardware.camera2.CameraCharacteristics.Key("android.logicalMultiCamera.physicalIds", ByteArray::class.java)
-                    val physicalIds: ByteArray? = try { characteristics.get(physicalIdsKey) } catch (e: Exception) { null }
-                    
-                    // Add the logical camera itself
-                    addCamera(cameraId, characteristics)
-                    
-                    // Also enumerate physical cameras behind logical multi-camera
-                    if (physicalIds != null && physicalIds.isNotEmpty()) {
-                        val idString = String(physicalIds, Charsets.US_ASCII)
-                        val physicalIdList = idString.split('\u0000').filter { s -> s.isNotEmpty() }
-                        Log.d("CameraDebug", "Camera[$cameraId] has physical cameras: $physicalIdList")
-                        for (physId in physicalIdList) {
-                            try {
-                                val physChars = cameraManager.getCameraCharacteristics(physId)
-                                addCamera(physId, physChars, isPhysical = true)
-                            } catch (e: Exception) {
-                                Log.d("CameraDebug", "Cannot access physical camera $physId: ${e.message}")
+                    try {
+                        val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                        addCamera(cameraId, characteristics)
+                        
+                        // Check if this logical camera has physical cameras (multi-camera system)
+                        val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+                        if (capabilities != null) {
+                            Log.d("CameraDebug", "Camera[$cameraId] capabilities: ${capabilities.toList()}")
+                            if (capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)) {
+                                val physicalIds = characteristics.physicalCameraIds
+                                Log.d("CameraDebug", "Camera[$cameraId] has LOGICAL_MULTI_CAMERA, physicalIds: ${physicalIds.toList()}")
+                                for (physicalId in physicalIds) {
+                                    try {
+                                        val physChars = cameraManager.getCameraCharacteristics(physicalId)
+                                        
+                                        // Skip physical camera if it has same focal length as the logical camera (duplicate)
+                                        val logicalFocal = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.getOrNull(0)
+                                        val physicalFocal = physChars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.getOrNull(0)
+                                        if (logicalFocal != null && physicalFocal != null && 
+                                            kotlin.math.abs(logicalFocal - physicalFocal) < 0.01f) {
+                                            Log.d("CameraDebug", "Skipping duplicate physical camera $physicalId (focal=$physicalFocal, same as logical camera $cameraId)")
+                                            continue
+                                        }
+                                        
+                                        addCamera(physicalId, physChars)
+                                        Log.d("CameraDebug", "Added physical camera $physicalId (focal=$physicalFocal)")
+                                    } catch (e: Exception) {
+                                        Log.e("CameraDebug", "Failed to get physical camera $physicalId", e)
+                                    }
+                                }
                             }
                         }
+                    } catch (e: Exception) {
+                        Log.e("CameraDebug", "Failed to get characteristics for camera $cameraId", e)
                     }
                 }
                 
                 Log.d("CameraDebug", "=== Final camera list: $cameraInfo ===")
                 _availableCameras.value = cameraInfo
+                
+                // Restore saved camera selection
+                try {
+                    val savedCameraId = cameraPreferences.countingCameraId.first()
+                    val savedIsFront = cameraPreferences.countingIsFront.first()
+                    if (savedCameraId != null && cameraInfo.containsKey(savedCameraId)) {
+                        _selectedCameraId.value = savedCameraId
+                        _isFrontCamera.value = savedIsFront
+                        currentEngine?.setCameraInfo(savedIsFront)
+                        Log.d("CameraDebug", "Restored counting camera: $savedCameraId, isFront=$savedIsFront")
+                    }
+                } catch (e: Exception) {
+                    Log.e("CameraDebug", "Failed to restore camera selection", e)
+                }
             } catch (e: Exception) {
                 Log.e("CameraDebug", "Camera enumeration failed", e)
             }
@@ -221,9 +247,39 @@ class CountingViewModel @Inject constructor(
     }
 
     fun toggleCamera() {
-        _isFrontCamera.value = !_isFrontCamera.value
-        _selectedCameraId.value = null // Reset to default selection
-        currentEngine?.setCameraInfo(_isFrontCamera.value)
+        val newIsFront = !_isFrontCamera.value
+        _isFrontCamera.value = newIsFront
+        // Find first camera matching the new facing direction
+        val defaultId = findDefaultCameraId(newIsFront)
+        _selectedCameraId.value = defaultId
+        currentEngine?.setCameraInfo(newIsFront)
+        // Persist selection
+        if (defaultId != null) {
+            viewModelScope.launch {
+                cameraPreferences.setCountingCamera(defaultId, newIsFront)
+            }
+        }
+    }
+
+    /**
+     * Find the first camera ID matching the requested facing direction.
+     * Returns null if no matching camera is found.
+     */
+    private fun findDefaultCameraId(isFront: Boolean): String? {
+        val cameraManager = appContext.getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+        val targetFacing = if (isFront) android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT else android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
+        for (cameraId in cameraManager.cameraIdList) {
+            try {
+                val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                val facing = characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
+                if (facing == targetFacing) {
+                    return cameraId
+                }
+            } catch (e: Exception) {
+                Log.e("CameraDebug", "Failed to get characteristics for $cameraId", e)
+            }
+        }
+        return null
     }
 
     fun selectCamera(cameraId: String?) {
@@ -236,6 +292,10 @@ class CountingViewModel @Inject constructor(
                 val isFront = chars.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
                 _isFrontCamera.value = isFront
                 currentEngine?.setCameraInfo(isFront)
+                // Persist selection
+                viewModelScope.launch {
+                    cameraPreferences.setCountingCamera(cameraId, isFront)
+                }
             } catch (e: Exception) {
                 Log.e("CameraDebug", "Failed to get camera characteristics for $cameraId", e)
             }
@@ -446,7 +506,7 @@ class CountingViewModel @Inject constructor(
         sensorType: SensorType = SensorType.VISION,
         mode: SessionMode? = null,
         targetSeconds: Int? = null,
-        targetResolution: android.util.Size = android.util.Size(640, 480),
+        targetResolution: android.util.Size = android.util.Size(640, 360),
         actionType: ActionType = ActionType.CUSTOM,
         templateId: Long? = null
     ) {

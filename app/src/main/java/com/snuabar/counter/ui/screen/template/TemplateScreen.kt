@@ -159,7 +159,7 @@ private fun RecordingPanel(
     val isFrontCamera by viewModel.isFrontCamera.collectAsState()
     val selectedCameraId by viewModel.selectedCameraId.collectAsState()
     val availableCameras by viewModel.availableCameras.collectAsState()
-    val effectiveCameraId = selectedCameraId ?: if (isFrontCamera) "1" else "0"
+    // Use selected camera or let ViewModel handle default
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Camera preview with pose overlay (full screen)
@@ -167,7 +167,7 @@ private fun RecordingPanel(
             modifier = Modifier.fillMaxSize()
         ) {
             PoseCameraPreview(
-                cameraId = effectiveCameraId,
+                cameraId = selectedCameraId ?: "0",
                 onBitmap = { bitmap -> viewModel.processBitmap(bitmap) },
                 keypoints = keypoints,
                 fps = fps,

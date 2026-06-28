@@ -18,10 +18,11 @@ import com.google.mediapipe.tasks.vision.poselandmarker.PoseLandmarkerResult
 class PoseLandmarkerHelper(
     context: Context,
     modelFileName: String,
-    private val runningMode: RunningMode = RunningMode.IMAGE,
+    private val runningMode: RunningMode = RunningMode.VIDEO,
     private val minPoseDetectionConfidence: Float = 0.5f,
     private val minPoseTrackingConfidence: Float = 0.5f,
-    private val minPosePresenceConfidence: Float = 0.5f
+    private val minPosePresenceConfidence: Float = 0.5f,
+    private val useGpu: Boolean = true
 ) {
     private var poseLandmarker: PoseLandmarker? = null
 
@@ -30,15 +31,24 @@ class PoseLandmarkerHelper(
     }
 
     private fun initPoseLandmarker(context: Context, modelFileName: String) {
-        // Try GPU first, fallback to CPU if not supported
-        poseLandmarker = try {
-            createPoseLandmarker(context, modelFileName, Delegate.GPU)
-        } catch (e: Exception) {
-            android.util.Log.w("PoseLandmarker", "GPU delegate not supported or failed, falling back to CPU: ${e.message}")
-            try {
+        // Use GPU if enabled and supported, otherwise fallback to CPU
+        if (useGpu) {
+            poseLandmarker = try {
+                createPoseLandmarker(context, modelFileName, Delegate.GPU)
+            } catch (e: Exception) {
+                android.util.Log.w("PoseLandmarker", "GPU delegate not supported or failed, falling back to CPU: ${e.message}")
+                try {
+                    createPoseLandmarker(context, modelFileName, Delegate.CPU)
+                } catch (e2: Exception) {
+                    android.util.Log.e("PoseLandmarker", "Failed to initialize with CPU delegate: ${e2.message}")
+                    null
+                }
+            }
+        } else {
+            poseLandmarker = try {
                 createPoseLandmarker(context, modelFileName, Delegate.CPU)
-            } catch (e2: Exception) {
-                android.util.Log.e("PoseLandmarker", "Failed to initialize with CPU delegate: ${e2.message}")
+            } catch (e: Exception) {
+                android.util.Log.e("PoseLandmarker", "Failed to initialize with CPU delegate: ${e.message}")
                 null
             }
         }
@@ -64,13 +74,18 @@ class PoseLandmarkerHelper(
 
     /**
      * Detect pose landmarks from a single bitmap image.
+     * For VIDEO mode, timestamp is used for cross-frame tracking.
      * Returns the first detected person's landmarks (33 keypoints) or null.
      */
-    fun detect(bitmap: Bitmap): PoseLandmarkerResult? {
+    fun detect(bitmap: Bitmap, timestampMs: Long = System.currentTimeMillis()): PoseLandmarkerResult? {
         if (poseLandmarker == null) return null
         val mpImage = BitmapImageBuilder(bitmap).build()
         return try {
-            poseLandmarker!!.detect(mpImage)
+            if (runningMode == RunningMode.VIDEO) {
+                poseLandmarker!!.detectForVideo(mpImage, timestampMs)
+            } else {
+                poseLandmarker!!.detect(mpImage)
+            }
         } catch (e: Exception) {
             android.util.Log.e("PoseLandmarker", "Detection failed: ${e.message}")
             null
