@@ -211,6 +211,35 @@ fun PoseCameraPreview(
         if (showCameraSwitch) {
             if (availableCameras.size > 1) {
                 var expanded by remember { mutableStateOf(false) }
+                
+                // Determine default back/front camera IDs
+                val defaultBackId = remember(availableCameras) {
+                    val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                    availableCameras.keys.find { id ->
+                        try {
+                            val chars = cameraManager.getCameraCharacteristics(id)
+                            chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+                        } catch (e: Exception) { false }
+                    }
+                }
+                val defaultFrontId = remember(availableCameras) {
+                    val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                    availableCameras.keys.find { id ->
+                        try {
+                            val chars = cameraManager.getCameraCharacteristics(id)
+                            chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+                        } catch (e: Exception) { false }
+                    }
+                }
+                
+                // Button text
+                val buttonText = when {
+                    selectedCameraId == null -> "默认"
+                    selectedCameraId == defaultBackId -> "默认后置"
+                    selectedCameraId == defaultFrontId -> "默认前置"
+                    else -> availableCameras[selectedCameraId] ?: "摄像头 $selectedCameraId"
+                }
+                
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -221,8 +250,7 @@ fun PoseCameraPreview(
                         modifier = Modifier.width(140.dp)
                     ) {
                         Text(
-                            text = selectedCameraId?.let { availableCameras[it] ?: "摄像头 $it" }
-                                ?: if (isFrontCamera) "默认前置" else "默认后置",
+                            text = buttonText,
                             maxLines = 1
                         )
                     }
@@ -230,7 +258,30 @@ fun PoseCameraPreview(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
+                        // Default back camera
+                        defaultBackId?.let { id ->
+                            DropdownMenuItem(
+                                text = { Text("默认后置") },
+                                onClick = {
+                                    onCameraSwitch?.invoke(id)
+                                    expanded = false
+                                }
+                            )
+                        }
+                        // Default front camera
+                        defaultFrontId?.let { id ->
+                            DropdownMenuItem(
+                                text = { Text("默认前置") },
+                                onClick = {
+                                    onCameraSwitch?.invoke(id)
+                                    expanded = false
+                                }
+                            )
+                        }
+                        Divider()
+                        // Other cameras (filter out defaults)
                         availableCameras.forEach { (id, displayName) ->
+                            if (id == defaultBackId || id == defaultFrontId) return@forEach
                             DropdownMenuItem(
                                 text = { Text(displayName) },
                                 onClick = {
@@ -239,14 +290,6 @@ fun PoseCameraPreview(
                                 }
                             )
                         }
-                        Divider()
-                        DropdownMenuItem(
-                            text = { Text(if (isFrontCamera) "默认前置" else "默认后置") },
-                            onClick = {
-                                onCameraSwitch?.invoke(null)
-                                expanded = false
-                            }
-                        )
                     }
                 }
             } else {

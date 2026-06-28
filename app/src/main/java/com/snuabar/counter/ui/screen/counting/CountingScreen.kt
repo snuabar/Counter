@@ -92,13 +92,11 @@ fun CountingScreen(
         }
     }
 
-    // Determine effective camera ID (default to physical camera 2 = wide angle back)
-    val effectiveCameraId = selectedCameraId ?: if (isFrontCamera) "1" else "2"
-
+    // Determine effective camera ID (use selected or let ViewModel handle default)
     Box(modifier = Modifier.fillMaxSize()) {
         // Camera preview (full screen)
         PoseCameraPreview(
-            cameraId = effectiveCameraId,
+            cameraId = selectedCameraId ?: "0",
             onBitmap = { bitmap -> viewModel.processBitmap(bitmap) },
             onCameraReady = { viewModel.setupDetection() },
             onCameraDisposed = { viewModel.stopDetection() },

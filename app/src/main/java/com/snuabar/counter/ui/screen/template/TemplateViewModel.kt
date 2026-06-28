@@ -30,7 +30,8 @@ class TemplateViewModel @Inject constructor(
     private val userRepository: UserRepository,
     private val recordingSession: RecordingSession,
     private val detectionEngineFactory: DetectionEngineFactory,
-    private val detectionPreferences: com.snuabar.counter.data.local.prefs.DetectionPreferences
+    private val detectionPreferences: com.snuabar.counter.data.local.prefs.DetectionPreferences,
+    private val cameraPreferences: com.snuabar.counter.data.local.prefs.CameraPreferences
 ) : ViewModel() {
 
     private val _templates = MutableStateFlow<List<Template>>(emptyList())
@@ -109,22 +110,128 @@ class TemplateViewModel @Inject constructor(
             }
         }
 
-        // Enumerate available cameras
+        // Enumerate available cameras (same logic as CountingViewModel)
         viewModelScope.launch {
             try {
                 val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
                 val cameraInfo = mutableMapOf<String, String>()
+                val usedNames = mutableMapOf<String, Int>()
                 for (cameraId in cameraManager.cameraIdList) {
-                    val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-                    val lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING)
-                    val facingStr = when (lensFacing) {
-                        CameraCharacteristics.LENS_FACING_BACK -> "后置"
-                        CameraCharacteristics.LENS_FACING_FRONT -> "前置"
-                        else -> "未知"
+                    try {
+                        val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                        val lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                        val focalLengths = characteristics.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                        
+                        Log.d("TemplateCameraDebug", "Camera[$cameraId]: facing=$lensFacing, focal=${focalLengths?.toList()}")
+                        
+                        val facingStr = when (lensFacing) {
+                            CameraCharacteristics.LENS_FACING_BACK -> "后置"
+                            CameraCharacteristics.LENS_FACING_FRONT -> "前置"
+                            else -> "未知"
+                        }
+                        
+                        val cameraType = if (lensFacing == CameraCharacteristics.LENS_FACING_BACK &&
+                            focalLengths != null && focalLengths.isNotEmpty()) {
+                            val focalLength = focalLengths[0]
+                            when {
+                                focalLength < 4f -> "超广角"
+                                focalLength < 7f -> "广角"
+                                else -> "长焦"
+                            }
+                        } else {
+                            ""
+                        }
+                        
+                        val baseName = if (cameraType.isNotEmpty()) {
+                            "$facingStr $cameraType"
+                        } else {
+                            "$facingStr 摄像头"
+                        }
+                        
+                        val count = usedNames.getOrDefault(baseName, 0)
+                        usedNames[baseName] = count + 1
+                        val displayName = if (count > 0) "$baseName ${count + 1}" else baseName
+                        
+                        cameraInfo[cameraId] = displayName
+                        
+                        // Check if this logical camera has physical cameras (multi-camera system)
+                        val capabilities = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES)
+                        if (capabilities != null) {
+                            Log.d("TemplateCameraDebug", "Camera[$cameraId] capabilities: ${capabilities.toList()}")
+                            if (capabilities.contains(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA)) {
+                                val physicalIds = characteristics.physicalCameraIds
+                                Log.d("TemplateCameraDebug", "Camera[$cameraId] has LOGICAL_MULTI_CAMERA, physicalIds: ${physicalIds.toList()}")
+                                for (physicalId in physicalIds) {
+                                    try {
+                                        val physChars = cameraManager.getCameraCharacteristics(physicalId)
+                                        val physFacing = physChars.get(CameraCharacteristics.LENS_FACING)
+                                        val physFocalLengths = physChars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+                                        
+                                        // Skip physical camera if it has same focal length as the logical camera (duplicate)
+                                        val logicalFocal = focalLengths?.getOrNull(0)
+                                        val physicalFocal = physFocalLengths?.getOrNull(0)
+                                        if (logicalFocal != null && physicalFocal != null && 
+                                            kotlin.math.abs(logicalFocal - physicalFocal) < 0.01f) {
+                                            Log.d("TemplateCameraDebug", "Skipping duplicate physical camera $physicalId (focal=$physicalFocal)")
+                                            continue
+                                        }
+                                        
+                                        val physFacingStr = when (physFacing) {
+                                            CameraCharacteristics.LENS_FACING_BACK -> "后置"
+                                            CameraCharacteristics.LENS_FACING_FRONT -> "前置"
+                                            else -> "未知"
+                                        }
+                                        
+                                        val physType = if (physFacing == CameraCharacteristics.LENS_FACING_BACK &&
+                                            physFocalLengths != null && physFocalLengths.isNotEmpty()) {
+                                            val physFocal = physFocalLengths[0]
+                                            when {
+                                                physFocal < 4f -> "超广角"
+                                                physFocal < 7f -> "广角"
+                                                else -> "长焦"
+                                            }
+                                        } else {
+                                            ""
+                                        }
+                                        
+                                        val physBaseName = if (physType.isNotEmpty()) {
+                                            "$physFacingStr $physType"
+                                        } else {
+                                            "$physFacingStr 摄像头"
+                                        }
+                                        
+                                        val physCount = usedNames.getOrDefault(physBaseName, 0)
+                                        usedNames[physBaseName] = physCount + 1
+                                        val physDisplayName = if (physCount > 0) "$physBaseName ${physCount + 1}" else physBaseName
+                                        
+                                        cameraInfo[physicalId] = physDisplayName
+                                        Log.d("TemplateCameraDebug", "Added physical camera $physicalId: $physDisplayName")
+                                    } catch (e: Exception) {
+                                        Log.e("TemplateCameraDebug", "Failed to get physical camera $physicalId", e)
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("TemplateCameraDebug", "Failed to get characteristics for camera $cameraId", e)
                     }
-                    cameraInfo[cameraId] = "$facingStr 摄像头 [$cameraId]"
                 }
+                Log.d("TemplateCameraDebug", "=== Final camera list: $cameraInfo ===")
                 _availableCameras.value = cameraInfo
+                
+                // Restore saved camera selection
+                try {
+                    val savedCameraId = cameraPreferences.templateCameraId.first()
+                    val savedIsFront = cameraPreferences.templateIsFront.first()
+                    if (savedCameraId != null && cameraInfo.containsKey(savedCameraId)) {
+                        _selectedCameraId.value = savedCameraId
+                        _isFrontCamera.value = savedIsFront
+                        recordingEngine?.setCameraInfo(savedIsFront)
+                        Log.d("TemplateCameraDebug", "Restored template camera: $savedCameraId, isFront=$savedIsFront")
+                    }
+                } catch (e: Exception) {
+                    Log.e("TemplateCameraDebug", "Failed to restore camera selection", e)
+                }
             } catch (e: Exception) {
                 Log.e("TemplateViewModel", "Camera enumeration failed", e)
             }
@@ -172,9 +279,38 @@ class TemplateViewModel @Inject constructor(
     // ---- Camera methods ----
 
     fun toggleCamera() {
-        _isFrontCamera.value = !_isFrontCamera.value
-        _selectedCameraId.value = null
-        recordingEngine?.setCameraInfo(_isFrontCamera.value)
+        val newIsFront = !_isFrontCamera.value
+        _isFrontCamera.value = newIsFront
+        // Find first camera matching the new facing direction
+        val defaultId = findDefaultCameraId(newIsFront)
+        _selectedCameraId.value = defaultId
+        recordingEngine?.setCameraInfo(newIsFront)
+        // Persist selection
+        if (defaultId != null) {
+            viewModelScope.launch {
+                cameraPreferences.setTemplateCamera(defaultId, newIsFront)
+            }
+        }
+    }
+
+    /**
+     * Find the first camera ID matching the requested facing direction.
+     */
+    private fun findDefaultCameraId(isFront: Boolean): String? {
+        val cameraManager = context.getSystemService(android.content.Context.CAMERA_SERVICE) as CameraManager
+        val targetFacing = if (isFront) CameraCharacteristics.LENS_FACING_FRONT else CameraCharacteristics.LENS_FACING_BACK
+        for (cameraId in cameraManager.cameraIdList) {
+            try {
+                val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
+                if (facing == targetFacing) {
+                    return cameraId
+                }
+            } catch (e: Exception) {
+                Log.e("CameraDebug", "Failed to get characteristics for $cameraId", e)
+            }
+        }
+        return null
     }
 
     fun selectCamera(cameraId: String?) {
@@ -187,6 +323,10 @@ class TemplateViewModel @Inject constructor(
                 val isFront = chars.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
                 _isFrontCamera.value = isFront
                 recordingEngine?.setCameraInfo(isFront)
+                // Persist selection
+                viewModelScope.launch {
+                    cameraPreferences.setTemplateCamera(cameraId, isFront)
+                }
             } catch (e: Exception) {
                 Log.e("CameraDebug", "Failed to get camera characteristics for $cameraId", e)
             }

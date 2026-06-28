@@ -85,9 +85,15 @@ fun Camera2Preview(
             val chars = cameraManager.getCameraCharacteristics(cameraId)
             val outputSizes = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
                 ?.getOutputSizes(SurfaceTexture::class.java)
-            outputSizes?.minByOrNull {
-                kotlin.math.abs(it.width * it.height - 640 * 360)
-            } ?: Size(640, 360)
+            // Prefer landscape sizes to ensure consistent rotation logic
+            val landscapeSizes = outputSizes?.filter { it.width > it.height }
+            if (landscapeSizes != null && landscapeSizes.isNotEmpty()) {
+                landscapeSizes.minByOrNull {
+                    kotlin.math.abs(it.width * it.height - 640 * 360)
+                } ?: Size(640, 360)
+            } else {
+                outputSizes?.firstOrNull() ?: Size(640, 360)
+            }
         } catch (e: Exception) {
             Size(640, 360)
         }
@@ -112,7 +118,11 @@ fun Camera2Preview(
                 image.close()
                 // Rotate landscape bitmap to portrait for MediaPipe
                 val rotatedBitmap = if (bitmap.width > bitmap.height) {
-                    val rotationAngle = if (isFrontCamera) 270f else 90f
+                    val localCameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+                    val chars = try { localCameraManager.getCameraCharacteristics(cameraId) } catch (_: Exception) { null }
+                    val sensorOrientation = chars?.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+                    val rotationAngle = sensorOrientation.toFloat()
+                    Log.d("Camera2Preview", "Rotating cameraId=$cameraId bitmap=${bitmap.width}x${bitmap.height} sensorOrientation=$sensorOrientation rotation=$rotationAngle")
                     val matrix = android.graphics.Matrix().apply { postRotate(rotationAngle) }
                     Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true).also {
                         if (!bitmap.isRecycled) bitmap.recycle()
