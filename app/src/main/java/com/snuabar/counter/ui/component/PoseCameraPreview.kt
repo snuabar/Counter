@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Cameraswitch
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
@@ -209,102 +210,56 @@ fun PoseCameraPreview(
 
         // Camera switch UI
         if (showCameraSwitch) {
-            if (availableCameras.size > 1) {
+            if (availableCameras.isNotEmpty()) {
                 var expanded by remember { mutableStateOf(false) }
-                
-                // Determine default back/front camera IDs
-                val defaultBackId = remember(availableCameras) {
-                    val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-                    availableCameras.keys.find { id ->
-                        try {
-                            val chars = cameraManager.getCameraCharacteristics(id)
-                            chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
-                        } catch (e: Exception) { false }
-                    }
-                }
-                val defaultFrontId = remember(availableCameras) {
-                    val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-                    availableCameras.keys.find { id ->
-                        try {
-                            val chars = cameraManager.getCameraCharacteristics(id)
-                            chars.get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
-                        } catch (e: Exception) { false }
-                    }
-                }
-                
-                // Button text
-                val buttonText = when {
-                    selectedCameraId == null -> "默认"
-                    selectedCameraId == defaultBackId -> "默认后置"
-                    selectedCameraId == defaultFrontId -> "默认前置"
-                    else -> availableCameras[selectedCameraId] ?: "摄像头 $selectedCameraId"
-                }
-                
+                val containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(16.dp)
                 ) {
-                    OutlinedButton(
+                    IconButton(
                         onClick = { expanded = true },
-                        modifier = Modifier.width(140.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
-                        Text(
-                            text = buttonText,
-                            maxLines = 1
+                        Icon(
+                            imageVector = Icons.Default.Cameraswitch,
+                            contentDescription = "切换摄像头",
+                            tint = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                     DropdownMenu(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
-                        // Default back camera
-                        defaultBackId?.let { id ->
-                            DropdownMenuItem(
-                                text = { Text("默认后置") },
-                                onClick = {
-                                    onCameraSwitch?.invoke(id)
-                                    expanded = false
-                                }
-                            )
-                        }
-                        // Default front camera
-                        defaultFrontId?.let { id ->
-                            DropdownMenuItem(
-                                text = { Text("默认前置") },
-                                onClick = {
-                                    onCameraSwitch?.invoke(id)
-                                    expanded = false
-                                }
-                            )
-                        }
-                        Divider()
-                        // Other cameras (filter out defaults)
+                        // All available cameras with highlight for current selection
                         availableCameras.forEach { (id, displayName) ->
-                            if (id == defaultBackId || id == defaultFrontId) return@forEach
+                            val isSelected = id == selectedCameraId
                             DropdownMenuItem(
-                                text = { Text(displayName) },
+                                text = {
+                                    Text(
+                                        text = displayName,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                },
                                 onClick = {
                                     onCameraSwitch?.invoke(id)
                                     expanded = false
-                                }
+                                },
+                                leadingIcon = if (isSelected) {
+                                    {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                } else null
                             )
                         }
                     }
-                }
-            } else {
-                IconButton(
-                    onClick = { onToggleCamera?.invoke() },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
-                        .size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Cameraswitch,
-                        contentDescription = "切换摄像头",
-                        tint = MaterialTheme.colorScheme.onPrimary
-                    )
                 }
             }
         }

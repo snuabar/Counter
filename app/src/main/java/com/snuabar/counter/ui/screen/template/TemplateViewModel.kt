@@ -68,6 +68,9 @@ class TemplateViewModel @Inject constructor(
     private val _recordingTemplateName = MutableStateFlow("")
     val recordingTemplateName: StateFlow<String> = _recordingTemplateName.asStateFlow()
 
+    private val _isRecordingComplete = MutableStateFlow(false)
+    val isRecordingComplete: StateFlow<Boolean> = _isRecordingComplete.asStateFlow()
+
     // Keypoints for visualization
     private val _keypoints = MutableStateFlow<Array<FloatArray>?>(null)
     val keypoints: StateFlow<Array<FloatArray>?> = _keypoints.asStateFlow()
@@ -386,6 +389,7 @@ class TemplateViewModel @Inject constructor(
 
         _recordingTemplateName.value = templateName
         _isRecording.value = true
+        _isRecordingComplete.value = false
         _recordProgress.value = 0
         _recordTargetFrames.value = durationSeconds * 10
 
@@ -406,6 +410,7 @@ class TemplateViewModel @Inject constructor(
             recorder.onProgressUpdate = { current, target ->
                 _recordProgress.value = current
                 _recordTargetFrames.value = target
+                _isRecordingComplete.value = (current >= target)
             }
             recorder.startRecording(durationSeconds)
             templateRecorder = recorder
@@ -450,6 +455,7 @@ class TemplateViewModel @Inject constructor(
                     userId = userId
                 )
                 if (template != null) {
+                    android.util.Log.d("TemplateViewModel", "Template built: name=$templateName, featureVector=${template.featureVector?.size ?: 0} bytes, frames=${templateRecorder?.recordedFrames ?: 0}")
                     if (existingId != null) {
                         // Update existing template with feature vector
                         val existing = templateRepository.getTemplate(existingId)
@@ -493,6 +499,7 @@ class TemplateViewModel @Inject constructor(
         templateRecorder = null
         _isRecording.value = false
         _isCountingDown.value = false
+        _isRecordingComplete.value = false
         _countdownSeconds.value = 5
         _recordProgress.value = 0
         _recordTargetFrames.value = 0

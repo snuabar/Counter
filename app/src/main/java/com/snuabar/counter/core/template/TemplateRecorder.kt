@@ -3,6 +3,8 @@ package com.snuabar.counter.core.template
 import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.Template
 import com.snuabar.counter.domain.model.TemplateType
+import com.snuabar.counter.domain.model.PoseType
+import com.snuabar.counter.domain.model.PoseDetector
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -20,6 +22,7 @@ class TemplateRecorder {
     private var isRecording = false
     private var targetFrames = 0
     private val collectedFeatures = mutableListOf<FloatArray>()
+    private val collectedPoseTypes = mutableListOf<PoseType>()
 
     // Progress callback: (currentFrame, targetFrames)
     var onProgressUpdate: ((Int, Int) -> Unit)? = null
@@ -43,6 +46,10 @@ class TemplateRecorder {
         if (collectedFeatures.size >= targetFrames) return
 
         val features = extractAngleFeatures(keypoints) ?: return
+
+        // Detect pose from keypoints
+        val pose = PoseDetector.detectPose(keypoints)
+        collectedPoseTypes.add(pose)
 
         // Real-time motion detection: skip frames where the person is not moving enough.
         // This prevents the progress bar from advancing when standing still.
@@ -97,13 +104,21 @@ class TemplateRecorder {
         // Encode the best segment as ByteArray
         val featureBytes = encodeFeatureSequence(bestFeatures)
 
+        // Determine the most common pose type from recorded frames
+        val detectedPoseType = if (collectedPoseTypes.isNotEmpty()) {
+            collectedPoseTypes.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: PoseType.UNKNOWN
+        } else {
+            PoseType.UNKNOWN
+        }
+
         return Template(
             userId = userId,
             name = name,
             type = TemplateType.CUSTOM,
             sensorType = SensorType.VISION,
             featureVector = featureBytes,
-            threshold = threshold
+            threshold = threshold,
+            poseType = detectedPoseType
         )
     }
 
@@ -172,6 +187,7 @@ class TemplateRecorder {
     fun cancelRecording() {
         isRecording = false
         collectedFeatures.clear()
+        collectedPoseTypes.clear()
         lastRecordedFeatures = null
     }
 
@@ -223,6 +239,16 @@ class TemplateRecorder {
         // Hip center vertical position: helps distinguish squat from side-to-side movement
         val hipCenterY = (leftHip[1] + rightHip[1]) / 2f
 
+        // Extended features for action differentiation (组合策略)
+        // Feature 9: kneeAngleSum - sum of both knee angles, smaller when squatting deeper
+        val kneeAngleSum = (leftKneeAngle + rightKneeAngle) / 360f
+        // Feature 10: bodyHeight - vertical distance from shoulder center to ankle center
+        val shoulderCenterY = (leftShoulder[1] + rightShoulder[1]) / 2f
+        val ankleCenterY = (leftAnkle[1] + rightAnkle[1]) / 2f
+        val bodyHeight = shoulderCenterY - ankleCenterY
+        // Feature 11: ankleY - average ankle vertical position
+        val ankleY = (leftAnkle[1] + rightAnkle[1]) / 2f
+
         return floatArrayOf(
             leftElbowAngle / 180f,
             rightElbowAngle / 180f,
@@ -232,7 +258,10 @@ class TemplateRecorder {
             rightHipAngle / 180f,
             leftKneeAngle / 180f,
             rightKneeAngle / 180f,
-            hipCenterY // 9th dim: hip center vertical position [0,1]
+            hipCenterY,            // 9th dim: hip center vertical position [0,1]
+            kneeAngleSum,          // 10th dim: knee angle sum [0,1], smaller when deeper squat
+            bodyHeight,            // 11th dim: body height (shoulder to ankle)
+            ankleY                 // 12th dim: average ankle Y position
         )
     }
 

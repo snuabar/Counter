@@ -58,6 +58,14 @@ class CountingViewModel @Inject constructor(
     private val _isRunning = MutableStateFlow(false)
     val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
+    // Countdown state
+    private val _isCountingDown = MutableStateFlow(false)
+    val isCountingDown: StateFlow<Boolean> = _isCountingDown.asStateFlow()
+
+    private val _countdownSeconds = MutableStateFlow(5)
+    val countdownSeconds: StateFlow<Int> = _countdownSeconds.asStateFlow()
+    private var countdownJob: kotlinx.coroutines.Job? = null
+
     private val _confidence = MutableStateFlow(0f)
     val confidence: StateFlow<Float> = _confidence.asStateFlow()
 
@@ -500,6 +508,35 @@ class CountingViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun beginCounting(
+        sensorType: SensorType = SensorType.VISION,
+        mode: SessionMode? = null,
+        targetSeconds: Int? = null,
+        targetResolution: android.util.Size = android.util.Size(640, 360),
+        actionType: ActionType = ActionType.CUSTOM,
+        templateId: Long? = null
+    ) {
+        _isCountingDown.value = true
+        _countdownSeconds.value = 5
+
+        countdownJob = viewModelScope.launch {
+            for (i in 5 downTo 1) {
+                _countdownSeconds.value = i
+                delay(1000L)
+            }
+            _isCountingDown.value = false
+            _countdownSeconds.value = 0
+            startCounting(sensorType, mode, targetSeconds, targetResolution, actionType, templateId)
+        }
+    }
+
+    fun cancelCountdown() {
+        countdownJob?.cancel()
+        countdownJob = null
+        _isCountingDown.value = false
+        _countdownSeconds.value = 5
     }
 
     fun startCounting(

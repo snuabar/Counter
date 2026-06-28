@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Stop
@@ -50,6 +51,7 @@ import com.snuabar.counter.domain.model.SensorType
 import com.snuabar.counter.domain.model.SessionMode
 import com.snuabar.counter.domain.model.Template
 import com.snuabar.counter.domain.model.TemplateType
+import com.snuabar.counter.ui.component.CountdownOverlay
 import com.snuabar.counter.ui.component.PoseCameraPreview
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -68,6 +70,8 @@ fun TemplateScreen(
     val recordProgress by viewModel.recordProgress.collectAsState()
     val recordTargetFrames by viewModel.recordTargetFrames.collectAsState()
     val recordingTemplateName by viewModel.recordingTemplateName.collectAsState()
+
+    val isRecordingComplete by viewModel.isRecordingComplete.collectAsState()
 
     Scaffold(
         topBar = {
@@ -96,6 +100,7 @@ fun TemplateScreen(
                     countdownSeconds = countdownSeconds,
                     progress = recordProgress,
                     targetFrames = recordTargetFrames,
+                    isRecordingComplete = isRecordingComplete,
                     onStop = {
                         viewModel.stopRecording(
                             onSuccess = { /* template saved */ },
@@ -145,6 +150,7 @@ private fun RecordingPanel(
     templateName: String,
     isCountingDown: Boolean,
     countdownSeconds: Int,
+    isRecordingComplete: Boolean,
     progress: Int,
     targetFrames: Int,
     onStop: () -> Unit,
@@ -154,6 +160,8 @@ private fun RecordingPanel(
     val keypoints by viewModel.keypoints.collectAsState()
     val fps by viewModel.fps.collectAsState()
     val isRecording by viewModel.isRecording.collectAsState()
+
+    val isRecordingComplete by viewModel.isRecordingComplete.collectAsState()
 
     // Camera selection state
     val isFrontCamera by viewModel.isFrontCamera.collectAsState()
@@ -181,38 +189,55 @@ private fun RecordingPanel(
             )
             // Recording / Countdown indicator
             if (isCountingDown) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .align(Alignment.Center),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "$countdownSeconds",
-                        style = MaterialTheme.typography.displayLarge.copy(
-                            color = MaterialTheme.colorScheme.primary,
-                            fontSize = 120.sp
-                        ),
-                        modifier = Modifier.padding(bottom = 80.dp)
-                    )
-                    Text(
-                        text = "请退后，全身入镜",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        ),
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 120.dp)
+                CountdownOverlay(
+                    seconds = countdownSeconds,
+                    message = "请退后，全身入镜",
+                    onCancel = onCancel
+                )
+            } else {
+                if (isRecordingComplete) {
+                    // Recording complete overlay
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .align(Alignment.Center),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Filled.CheckCircle,
+                                contentDescription = "录制完成",
+                                tint = Color(0xFF4CAF50),
+                                modifier = Modifier.size(120.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "录制完成",
+                                style = MaterialTheme.typography.displayMedium.copy(
+                                    color = Color(0xFF4CAF50),
+                                    fontSize = 48.sp
+                                )
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "可以停止动作了",
+                                style = MaterialTheme.typography.titleLarge.copy(
+                                    color = Color.White
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.FiberManualRecord,
+                        contentDescription = "录制中",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(16.dp)
+                            .size(32.dp)
                     )
                 }
-            } else {
-                Icon(
-                    imageVector = Icons.Default.FiberManualRecord,
-                    contentDescription = "录制中",
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(16.dp)
-                        .size(32.dp)
-                )
             }
         }
 
@@ -242,15 +267,15 @@ private fun RecordingPanel(
                     }
                 } else {
                     Text(
-                        text = "正在录制: $templateName",
+                        text = if (isRecordingComplete) "✓ 录制完成" else "正在录制: $templateName",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "帧数: $progress / $targetFrames",
+                        text = if (isRecordingComplete) "可以停止动作了" else "帧数: $progress / $targetFrames",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    if (targetFrames > 0) {
+                    if (targetFrames > 0 && !isRecordingComplete) {
                         LinearProgressIndicator(
                             progress = (progress.toFloat() / targetFrames.toFloat()).coerceIn(0f, 1f),
                             modifier = Modifier
