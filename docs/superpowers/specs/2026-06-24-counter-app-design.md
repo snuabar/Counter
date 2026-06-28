@@ -373,13 +373,13 @@ Template (可选) --1 CountingSession
 | 相机方案 | **Camera2**（预览 + 录制） |
 | 预览组件 | **PoseCameraPreview 统一组件**（Camera2 预览 + 骨架绘制 + 摄像头切换 + 权限检查） |
 
-## 10. 待决策事项
+## 10. 已决策事项
 
-- [ ] 数据导出 JSON 的具体格式规范（Phase 2 确定）
-- [ ] 远程备份的协议选择（WebDAV / 自定义 API？Phase 3 确定）
+- [x] 数据导出 JSON 的具体格式规范 — **已完成**，见 `BackupRepository.kt`
+- [x] 远程备份的协议选择 — **已确定 WebDAV**，见 `WebDAVRemoteBackupDataSource.kt`
 
 ---
 
-*文档版本：v1.1*
+*文档版本：v1.2*
 *创建日期：2026-06-24*
-*最后更新：2026-06-24*
+*最后更新：2026-06-28*

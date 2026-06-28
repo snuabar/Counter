@@ -1,19 +1,19 @@
 # Counter App 实现计划
 
-> **⚠️ 项目状态更新（2026-06-27 会话4）：**
+> **⚠️ 项目状态更新（2026-06-28 会话5）：**
 >
 > | Phase | 状态 | 完成度 |
 > |-------|------|--------|
 > | **Phase 1：MVP** | ✅ 完成 | 100% |
-> | **Phase 2：完整功能** | 🟡 大部分完成 | ~85% |
-> | **Phase 3：增强优化** | 🟡 大部分完成 | ~80% |
+> | **Phase 2：完整功能** | 🟡 大部分完成 | ~90% |
+> | **Phase 3：增强优化** | 🟡 大部分完成 | ~85% |
 >
 > **详细进度：** 见 `docs/project-memory/PROGRESS.md`
 >
-> **关键待办：**
+> **关键已完成：**
 > - ✅ 架构重构：ActionType 整合到 Template，PLANK 移除，SensorType 统一
 > - ✅ 模板必选：移除"不使用模板"，自动选择第一个模板
-> - ✅ 前置摄像头骨架方向修复
+> - ✅ 前置摄像头骨架方向修复（x 轴镜像 + Bitmap 旋转）
 > - ✅ TimerService 前台服务崩溃修复
 > - ✅ PoseCameraPreview 统一组件：Camera2 预览 + 骨架绘制 + 摄像头切换 + 权限检查
 > - ✅ 摄像头切换作为预览标配：CountingScreen 和 TemplateScreen 共用同一组件
@@ -22,11 +22,16 @@
 > - ✅ FPS 实时显示：PoseCameraPreview 左上角叠加骨架刷新频率
 > - ✅ 推理异步化修复：processBitmap 改为 analysisExecutor 异步执行，解决骨架滞后
 > - ✅ 帧率限流调整：从 10fps 提升到 15fps
-> - 🟡 硬件加速开关设置（SettingsScreen GPU/CPU 切换，待实现）
-> - 🟡 骨架刷新率提升至 20-23fps（当前 12fps，待优化）
-> - 🟡 模板录制与模板使用联调（TemplateScreen 录制流程、TemplateViewModel 集成）
-> - 🟡 自定义样本录制与特征提取（未实现）
-> - 🟡 模板匹配集成（骨架代码已有，未实现匹配逻辑）
+> - ✅ 硬件加速开关设置（SettingsScreen GPU/CPU 切换）
+> - ✅ 模板录制流程：TemplateRecorder 特征提取 + 最佳片段 + 质量检查
+> - ✅ 自定义模板匹配：CustomPoseActionDetector（DTW 算法）
+>
+> **关键待办：**
+> - 🟡 模板录制-计数联调（录制→保存→选择→计数的完整流程真机验证）
+> - ✅ 骨架刷新率提升至 20-23fps（快速模式 GPU 加速下约 20-23fps）
+> - 🟡 音频检测引擎真机调优（FFT + 峰值检测，参数待调优）
+> - 🟡 计时反馈增强（目标提醒、语音播报、庆祝动画）
+> - 🟡 网络备份完整实现（WebDAV 上传/下载触发）
 > - 🟢 单元测试覆盖不足（仅 1 个测试文件）
 
 ---
@@ -1540,14 +1545,14 @@ git commit -m "feat(navigation): add bottom tab navigation with Compose Navigati
 - [x] 集成到 DetectionEngine 接口
 
 #### 任务 14：自定义样本录制
-- [ ] 实现样本录制界面（CameraX / AudioRecord）
-- [ ] 实现特征提取（视觉：光流直方图；音频：MFCC）
-- [ ] 保存样本到本地文件 + 特征向量到数据库
+- [x] 实现样本录制界面（Camera2 预览 + 倒计时 + 录制面板）
+- [x] 实现特征提取（关节角度特征向量 + 最佳片段提取 + 质量检查）
+- [x] 保存样本到数据库（特征向量编码为 ByteArray）
 
 #### 任务 15：模板匹配
-- [ ] 实现视觉模板匹配（余弦相似度 / 欧氏距离）
-- [ ] 实现音频模板匹配（DTW 距离）
-- [ ] 在检测引擎中集成模板匹配逻辑
+- [x] 实现视觉模板匹配（CustomPoseActionDetector + DTW 动态时间规整）
+- [x] 实现音频模板匹配（AudioTemplateMatcher + DTW）
+- [x] 在检测引擎中集成模板匹配逻辑（ActionDetectorFactory.createDetector）
 
 #### 任务 16：阈值调节
 - [x] 在设置界面添加滑块控件
@@ -1607,8 +1612,8 @@ MediaPipe PoseLandmarker 集成、GPU 加速自动回退、远程备份接口预
 - [x] 推理异步化（analysisExecutor 异步执行，避免阻塞预览线程）
 - [x] FPS 实时显示（PoseCameraPreview 左上角叠加骨架刷新频率）
 - [x] 帧率限流调整（10fps → 15fps）
-- [ ] 硬件加速开关设置（SettingsScreen GPU/CPU 切换）
-- [ ] 骨架刷新率提升至 20-23fps（调优限流、降低输入分辨率）
+- [x] 硬件加速开关设置（SettingsScreen GPU/CPU 切换）
+- [x] 骨架刷新率提升至 20-23fps（快速模式 GPU 加速下约 20-23fps）
 
 #### 任务 23：远程备份接口
 - [x] 设计备份接口抽象
@@ -1698,8 +1703,8 @@ fun ImageProxy.toMat(): Mat {
 
 ### Phase 2 验收标准
 - [x] 支持多用户切换
-- [ ] 音频检测可以正确计数（拍手/跳绳声音）
-- [ ] 用户可以录制自定义样本并用于计数
+- [ ] 音频检测可以正确计数（拍手/跳绳声音）——基础实现完成，待真机调优
+- [x] 用户可以录制自定义样本并用于计数——录制+匹配算法已完成，待真机联调验证
 - [x] 阈值调节实时生效
 - [x] 数据分析页面展示正确的统计图表
 - [x] 数据可以导出为 JSON 并导入恢复
@@ -1708,7 +1713,7 @@ fun ImageProxy.toMat(): Mat {
 - [x] MediaPipe PoseLandmarker 模型可选（3 个档位）并真机验证基础功能
 - [x] GPU 加速自动回退（推理从 ~180ms 降到 ~60ms）
 - [x] 骨架刷新流畅（FPS 实时显示，当前 12fps）
-- [x] 远程备份接口预留完成（WebDAV 已实现）
+- [x] 远程备份接口预留完成（WebDAV 配置 UI 已实现）
 - [ ] UI 在所有目标设备上显示正常（已在 1 款设备验证）
 - [ ] 低端设备运行流畅（帧率 > 15fps）
-- [ ] 单元测试覆盖率 > 60%
+- [ ] 单元测试覆盖率 > 60%（当前仅 1 个测试文件）

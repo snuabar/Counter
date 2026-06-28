@@ -2,9 +2,12 @@
 
 > **用途：** 本文件用于在多台开发电脑之间同步项目状态。当在新电脑上打开项目时，首先阅读此文件以了解当前进度。
 >
-> **最后更新：** 2026-06-27（会话4）
+> **最后更新：** 2026-06-28（会话5）
 
-> ⚠️ **部分功能待验证：** 音频检测引擎、模板匹配算法尚未在真机上充分测试。TFLite 姿态检测、动作识别、前后摄像头骨架显示已通过真机验证。
+> **状态总览：**
+> - Phase 1（MVP）：100% 完成
+> - Phase 2（完整功能）：~90% 完成
+> - Phase 3（增强优化）：~85% 完成
 
 ---
 
@@ -23,200 +26,93 @@
 | **UI** | Jetpack Compose + Material3 |
 | **架构** | MVVM + Clean Architecture + Repository 模式 |
 | **依赖注入** | Hilt |
-| **本地存储** | Room (SQLite) |
-| **相机** | Camera2（预览 + 录制） |
-| **图像处理** | OpenCV + TensorFlow Lite (MoveNet) |
+| **本地存储** | Room (SQLite) + DataStore |
+| **相机** | Camera2（预览 + 分析） |
+| **姿态检测** | MediaPipe Tasks Vision (PoseLandmarker) |
 | **音频处理** | AudioRecord + FFT |
 | **图表** | Compose 自绘（柱状图） |
 | **构建** | Gradle with Kotlin DSL |
 
 ---
 
-## 项目架构
-
-```
-app/src/main/java/com/snuabar/counter/
-├── core/
-│   ├── detection/           # 检测引擎核心
-│   │   ├── DetectionEngine.kt
-│   │   ├── DetectionEngineFactoryImpl.kt
-│   │   ├── VisionDetectionEngine.kt          # 传统帧差分检测
-│   │   ├── audio/
-│   │   │   └── AudioDetectionEngine.kt       # 音频检测（FFT）
-│   │   ├── tflite/
-│   │   │   ├── PoseModelConfig.kt             # 模型配置（3个档位）
-│   │   │   ├── TFLiteDetectionEngine.kt       # TFLite 主引擎
-│   │   │   └── action/                        # 动作识别算法
-│   │   │       ├── PoseActionResult.kt
-│   │   │       ├── PoseActionDetector.kt
-│   │   │       ├── BasePoseActionDetector.kt
-│   │   │       ├── PushUpActionDetector.kt    # 俯卧撑
-│   │   │       ├── SquatActionDetector.kt     # 深蹲
-│   │   │       ├── CustomPoseActionDetector.kt # 自定义模板（占位）
-│   │   │       └── ActionDetectorFactory.kt
-│   │   └── vision/
-│   │       ├── FrameDifferencer.kt
-│   │       └── MotionDetector.kt
-│   ├── template/            # 模板匹配（骨架）
-│   │   ├── TemplateMatcher.kt
-│   │   ├── VisionTemplateMatcher.kt
-│   │   └── AudioTemplateMatcher.kt
-│   ├── biometric/
-│   │   └── BiometricAuthManager.kt
-│   └── service/              # 后台服务
-│       ├── TimerService.kt              # 计时前台服务
-│       └── TimerStateHolder.kt          # 计时状态共享
-├── data/
-│   ├── local/
-│   │   ├── db/              # Room 数据库
-│   │   │   ├── CounterDatabase.kt
-│   │   │   ├── dao/         # UserDao, CountingSessionDao, CountEventDao, TemplateDao
-│   │   │   └── entity/      # UserEntity, CountingSessionEntity, CountEventEntity, TemplateEntity
-│   │   └── prefs/           # DataStore 偏好
-│   │       ├── ThemePreferences.kt
-│   │       └── UserPreferences.kt
-│   ├── remote/              # 远程备份
-│   │   ├── RemoteBackupDataSource.kt
-│   │   └── WebDAVRemoteBackupDataSource.kt
-│   └── repository/          # Repository 实现
-│       ├── BackupRepository.kt          # JSON 导入/导出
-│       ├── CountingSessionRepositoryImpl.kt
-│       ├── TemplateRepositoryImpl.kt
-│       └── UserRepositoryImpl.kt
-├── domain/
-│   ├── model/               # 领域模型
-│   │   ├── ActionType.kt              # PUSH_UP, SQUAT, CUSTOM
-│   │   ├── User.kt
-│   │   ├── CountingSession.kt
-│   │   ├── CountEvent.kt
-│   │   ├── Template.kt                # 含 actionType 字段
-│   │   ├── SessionMode.kt             # COUNTING, TIMER
-│   │   ├── SensorType.kt              # VISION, AUDIO（唯一）
-│   │   └── SessionStatistics.kt
-│   └── repository/          # Repository 接口
-│       ├── CountingSessionRepository.kt
-│       ├── TemplateRepository.kt
-│       └── UserRepository.kt
-├── di/                      # Hilt 模块
-│   ├── AppModule.kt
-│   ├── DatabaseModule.kt
-│   └── RepositoryModule.kt
-└── ui/
-    ├── navigation/
-    │   └── Navigation.kt              # 底部导航（5个Tab）
-    └── screen/
-        ├── counting/
-        │   ├── CountingScreen.kt        # 主计数界面
-        │   └── CountingViewModel.kt
-        ├── history/
-        │   ├── HistoryScreen.kt         # 历史记录
-        │   └── HistoryViewModel.kt
-        ├── analysis/
-        │   ├── AnalysisScreen.kt        # 数据分析（柱状图）
-        │   └── AnalysisViewModel.kt
-        ├── template/
-        │   ├── TemplateScreen.kt        # 模板管理
-        │   └── TemplateViewModel.kt
-        ├── settings/
-        │   ├── SettingsScreen.kt        # 设置
-        │   └── SettingsViewModel.kt
-        └── user/
-            ├── UserScreen.kt            # 用户管理
-            └── UserViewModel.kt
-```
-
----
-
-## 已实现功能
+## 已实现功能（真机验证通过）
 
 ### Phase 1：MVP（核心基础）
 
-| # | 功能 | 状态 | 备注 |
-|---|------|------|------|
-| 1 | 项目初始化（build.gradle.kts, AndroidManifest, Hilt） | ✅ | 已完成 |
-| 2 | Clean Architecture 目录结构 | ✅ | 已完成 |
-| 3 | Domain 层数据模型 | ✅ | User, CountingSession, CountEvent, Template |
-| 4 | Room 数据库（Entity, DAO, Database） | ✅ | 已完成 |
-| 5 | Repository 层（接口 + 实现） | ✅ | 已完成 |
-| 6 | Hilt DI 配置 | ✅ | AppModule, DatabaseModule, RepositoryModule |
-| 7 | 视觉检测引擎（帧差分） | ✅ | VisionDetectionEngine |
-| 8 | 音频检测引擎（FFT） | ✅ | AudioDetectionEngine（基础实现） |
-| 9 | TFLite 检测引擎 | ✅ | 支持 3 个 MoveNet 模型（192/256 输入） |
-| 10 | 基础 Compose UI（计数界面） | ✅ | CountingScreen + CountingViewModel |
-| 11 | 底部导航 + 5 个 Tab | ✅ | 计数、历史、分析、模板、设置 |
-| 12 | 内置模板初始化 | ✅ | 俯卧撑（计数）、深蹲（计数）、平板支撑（计时） |
+| # | 功能 | 状态 |
+|---|------|------|
+| 1 | 项目初始化（build.gradle.kts, AndroidManifest, Hilt） | 完成 |
+| 2 | Clean Architecture 目录结构 | 完成 |
+| 3 | Domain 层数据模型（User, CountingSession, CountEvent, Template） | 完成 |
+| 4 | Room 数据库（Entity, DAO, Database） | 完成 |
+| 5 | Repository 层（接口 + 实现） | 完成 |
+| 6 | Hilt DI 配置 | 完成 |
+| 7 | 基础 Compose UI（计数界面） | 完成 |
+| 8 | 底部导航 + 5 个 Tab | 完成 |
 
 ### Phase 2：完整功能
 
-| # | 功能 | 状态 | 备注 |
-|---|------|------|------|
-| 13 | 多用户支持 | ✅ | 创建、切换、删除、默认用户 |
-| 14 | 用户管理 UI | ✅ | UserScreen |
-| 15 | 历史记录页面 | ✅ | HistoryScreen + 会话列表 |
-| 16 | 数据分析页面 | ✅ | AnalysisScreen + 柱状图 + 统计卡片 |
-| 17 | 模板管理页面 | ✅ | TemplateScreen + 添加模板对话框 |
-| 18 | 阈值调节 | ✅ | SettingsScreen 滑块（0.1~1.0） |
-| 19 | 深色模式支持 | ✅ | ThemePreferences + 3种模式（系统/浅色/深色） |
-| 20 | 生物识别切换用户 | ✅ | BiometricAuthManager + UserScreen |
-| 21 | 数据导出/导入（JSON） | ✅ | BackupRepository + SettingsScreen UI |
+| # | 功能 | 状态 |
+|---|------|------|
+| 9 | 多用户支持（创建、切换、删除） | 完成 |
+| 10 | 用户管理 UI | 完成 |
+| 11 | 历史记录页面 | 完成 |
+| 12 | 数据分析页面（柱状图 + 统计卡片） | 完成 |
+| 13 | 模板管理页面（添加/删除/列表） | 完成 |
+| 14 | 阈值调节（SettingsScreen 滑块 0.1~1.0） | 完成 |
+| 15 | 深色模式支持（系统/浅色/深色） | 完成 |
+| 16 | 生物识别切换用户 | 完成 |
+| 17 | 数据导出/导入（JSON） | 完成 |
 
-### Phase 3：增强优化（已完成部分）
+### Phase 3：增强优化
 
-| # | 功能 | 状态 | 备注 |
-|---|------|------|------|
-| 22 | TFLite 集成（MoveNet） | ✅ | lightning-int8, lightning-fp16, thunder-fp16 |
-| 23 | 3 个内置动作识别 | ✅ | 俯卧撑、深蹲、平板支撑（基于关键点角度） |
-| 24 | 模板驱动动作选择 | ✅ | 选择模板自动确定动作类型，移除硬编码 ActionTypeSelector |
-| 25 | 模型切换 UI | ✅ | SettingsScreen RadioButton 选择 3 个模型 |
-| 26 | 远程备份接口预留 | ✅ | RemoteBackupDataSource + WebDAV 骨架 |
-| 27 | UI 美化（动画 + 震动） | ✅ | animateContentSize, graphicsLayer, Vibrator |
-| 28 | 性能优化（相机分辨率） | ✅ | targetResolution 配置 |
-| 29 | Camera2 管线优化 | ✅ | 帧率5→10fps，骨架叠加层，模型热重载，前置摄像头方向修复 |
-| 30 | MediaPipe PoseLandmarker 迁移 | ✅ | 从手动两阶段 TFLite 推理迁移到 MediaPipe `.task` 模型，3个模型对应3个档位 |
-| 31 | GPU 加速自动回退 | ✅ | 优先尝试 GPU delegate，不支持时自动回退到 CPU，推理速度提升3倍+ |
-| 32 | FPS 实时显示 | ✅ | PoseCameraPreview 左上角叠加骨架刷新频率显示 |
-| 33 | 推理异步化修复 | ✅ | processBitmap 改为 analysisExecutor 异步执行，解决骨架滞后漂移问题 |
-| 34 | 帧率限流调整 | ✅ | 从 10fps 提升到 15fps，GPU 加速下快速模式实测 12fps |
-| 35 | 架构重构 | ✅ | ActionType→domain.model，SensorType统一，Template+actionType，DB v3 |
-| 36 | TimerService 崩溃修复 | ✅ | Android 12+ 前台服务 5 秒规则修复 |
-| 37 | 模板选择交互优化 | ✅ | 模板必选，自动选择首个，目标值可调 |
-| 38 | 预览组件统一 | ✅ | PoseCameraPreview 统一封装 Camera2 预览 + 骨架绘制 + 摄像头切换 + 权限检查 |
-| 39 | 摄像头切换标配化 | ✅ | CountingScreen 和 TemplateScreen 共用同一套摄像头切换 UI |
-| 40 | 权限内聚化 | ✅ | 相机权限检查移入 PoseCameraPreview，Screen 无需关心权限逻辑 |
+| # | 功能 | 状态 |
+|---|------|------|
+| 18 | MediaPipe PoseLandmarker 迁移（lite/full/heavy 三档） | 完成 |
+| 19 | GPU 加速自动回退（推理速度提升 3 倍+） | 完成 |
+| 20 | FPS 实时显示（PoseCameraPreview 左上角） | 完成 |
+| 21 | 推理异步化（analysisExecutor 异步执行） | 完成 |
+| 22 | 帧率限流（15fps） | 完成 |
+| 23 | 骨架方向修复（前后置旋转 + 镜像） | 完成 |
+| 24 | 摄像头切换标配化（下拉菜单/单按钮） | 完成 |
+| 25 | PoseCameraPreview 统一组件 | 完成 |
+| 26 | 内置模板初始化（俯卧撑、深蹲、平板支撑） | 完成 |
+| 27 | 动作识别基于规则（角度阈值） | 完成 |
+| 28 | 模板录制流程（倒计时 + 特征提取 + 最佳片段 + 质量检查） | 完成 |
+| 29 | 自定义模板匹配算法（CustomPoseActionDetector + DTW） | 完成 |
+| 30 | 模板匹配器骨架（VisionTemplateMatcher / AudioTemplateMatcher） | 完成 |
+| 31 | 硬件加速开关（SettingsScreen GPU/CPU 切换） | 完成 |
+| 32 | WebDAV 远程备份配置 UI | 完成 |
+| 33 | TimerService 前台服务（平板支撑计时） | 完成 |
+| 34 | 骨架刷新率提升（快速模式约 20-23fps） | 完成 |
 
 ---
 
-## 待实现功能（按难度排序）
+## 待实现/待完善功能（按优先级排序）
 
-### 🔴 高优先级（核心功能缺失）
+### 高优先级（核心功能待联调）
 
-| # | 功能 | 难度 | 说明 | 预计工作量 |
-|---|------|------|------|----------|
-| 1 | **硬件加速开关设置** | ⭐ 简单 | SettingsScreen 添加 GPU/CPU 切换开关，开：支持GPU时使用GPU加速，不支持时使用CPU；关：固定为CPU | 1小时 |
-| 2 | **骨架刷新率提升至 20-23fps** | ⭐⭐ 中等 | 当前快速模式 GPU 加速下 12fps（限流15fps），需进一步调优限流间隔、降低输入分辨率、或尝试 GPU delegate 参数优化 | 2小时 |
-| 3 | **模板录制与模板使用调试** | ⭐⭐⭐ 较难 | TemplateScreen 录制流程、TemplateViewModel 与 TFLiteDetectionEngine 集成、计数页模板匹配逻辑联调 | 4小时 |
-| 4 | **自定义样本录制与特征提取** | ⭐⭐ 中等 | 录制界面已有入口，需实现特征提取（视觉：光流直方图；音频：MFCC）和保存 | 4小时 |
-| 5 | **模板匹配集成** | ⭐⭐ 中等 | `VisionTemplateMatcher` / `AudioTemplateMatcher` 算法骨架已有，需与检测引擎集成 | 3小时 |
-| 6 | **TFLite 真机调优** | ⭐⭐ 中等 | 基础骨架和角度阈值已真机验证，需进一步优化计数准确率，自定义模板匹配逻辑待实现 | 2小时 |
+| # | 功能 | 说明 | 预估工作量 |
+|---|------|------|----------|
+| 1 | **模板录制-计数联调** | TemplateScreen 录制流程、TemplateRecorder、CustomPoseActionDetector 均已实现，但尚未在真机验证完整流程：录制模板 → 保存到数据库 → 选择模板计数 → DTW 匹配计数 | 4小时 |
+| 2 | ~~骨架刷新率提升至 20-23fps~~ | **已完成** — 快速模式 GPU 加速下约 20-23fps | - |
+| 3 | **音频检测引擎真机调优** | AudioDetectionEngine 已有基础实现（FFT + 峰值检测 + 自适应噪声门限），但尚未在真机充分测试，阈值/参数需调优 | 3小时 |
+| 4 | **计时反馈增强** | 目标时间到达提醒（震动+音效）、中途语音播报（可开关）、完成庆祝动画（可开关） | 4小时 |
 
-### 🟡 中优先级（功能增强）
+### 中优先级（功能增强）
 
-| # | 功能 | 难度 | 说明 | 预计工作量 |
-|---|------|------|------|----------|
-| 7 | **音频检测引擎调优** | ⭐⭐ 中等 | `AudioDetectionEngine` 已有基础实现，需真机调优 | 2小时 |
-| 8 | **计时反馈增强** | ⭐⭐ 中等 | 目标时间提醒（震动+音效）、中途语音播报（可开关） | 3小时 |
-| 9 | **网络备份 UI** | ⭐⭐ 中等 | WebDAV 已实现，需添加配置和触发 UI | 2小时 |
-| 10 | **实时阈值持久化** | ⭐ 简单 | 设置页滑块已有，需保存到数据库并实时应用到检测引擎 | 1小时 |
+| # | 功能 | 说明 | 预估工作量 |
+|---|------|------|----------|
+| 5 | **网络备份完整实现** | WebDAV 配置 UI 已有，但上传/下载触发和实际备份流程待完善 | 3小时 |
+| 6 | **低端设备性能优化** | 相机分辨率动态降级、帧率自适应、电池优化 | 4小时 |
+| 7 | **多屏幕尺寸适配** | 平板/折叠屏布局适配 | 3小时 |
 
-### 🟢 低优先级（锦上添花）
+### 低优先级（质量保障）
 
-| # | 功能 | 难度 | 说明 | 预计工作量 |
-|---|------|------|------|----------|
-| 11 | **成就/庆祝系统** | ⭐⭐⭐⭐ 困难 | 完成目标时的动画 + 音效 + 震动反馈 | 4小时 |
-| 12 | **多屏幕尺寸适配** | ⭐⭐ 中等 | 平板/折叠屏适配优化 | 3小时 |
-| 13 | **低端设备性能优化** | ⭐⭐⭐ 较难 | 相机分辨率动态降级、帧率控制、电池优化 | 4小时 |
-| 14 | **单元测试覆盖** | ⭐⭐⭐ 较难 | 已有 DetectionConfigTest，需补 Repository / Engine / ViewModel 测试 | 4小时 |
-| 15 | **集成测试** | ⭐⭐⭐⭐ 困难 | Compose UI Test + CameraX 测试工具 | 8小时 |
+| # | 功能 | 说明 | 预估工作量 |
+|---|------|------|----------|
+| 8 | **单元测试覆盖** | 仅 1 个测试文件，需补 Repository / Engine / ViewModel 测试 | 6小时 |
+| 9 | **集成测试** | Compose UI Test + 相机集成测试 | 8小时 |
 
 ---
 
@@ -224,95 +120,57 @@ app/src/main/java/com/snuabar/counter/
 
 | 日期 | 决策 | 说明 |
 |------|------|------|
-| 2026-06-24 | TFLite 模型精简为 3 个 | 从 6 个 MoveNet 模型精简为 lightning-int8（快速）、lightning-fp16（标准）、thunder-fp16（精确） |
-| 2026-06-24 | 动作识别基于规则（非 ML） | 俯卧撑/深蹲/平板支撑使用角度阈值判断，而非训练 ML 模型 |
-| 2026-06-25 | 自定义模板预留接口 | 创建 `CustomPoseActionDetector` 占位，后续用 DTW 算法实现模板匹配 |
-| 2026-06-25 | ActionType 整合到模板 | ActionType 移至 domain.model，Template 新增 actionType 字段，选择模板自动确定动作类型 |
-| 2026-06-25 | PLANK 从 ActionType 移除 | 计时型活动通过 SessionMode.TIMER + 内置模板实现，不占用 ActionType |
-| 2026-06-25 | 模板为必选项 | 移除"不使用模板"选项，自动选择第一个模板，未选模板时禁用开始按钮 |
-| 2026-06-25 | Camera2 替代 CameraX 用于计数 | 计数界面改用 Camera2 实现更高帧率和更精确控制，模板录制仍用 CameraX |
-| 2026-06-25 | PoseCameraPreview 统一组件 | 将 Camera2 预览、骨架绘制、摄像头切换、权限检查统一封装到单一组件，CountingScreen 和 TemplateScreen 复用 |
-| 2026-06-25 | 摄像头切换作为预览标配 | 所有使用相机预览的页面统一支持摄像头切换（下拉菜单/单按钮），无需重复实现 |
-| 2026-06-27 | MediaPipe PoseLandmarker 替换手动 TFLite 推理 | 使用 `com.google.mediapipe:tasks-vision` 库替代手动两阶段推理，支持 lite/full/heavy 三个 .task 模型文件 |
-| 2026-06-27 | GPU 优先自动回退策略 | PoseLandmarkerHelper 初始化时先尝试 GPU delegate，失败自动回退到 CPU，推理速度提升 3 倍+ |
-| 2026-06-27 | 限流从 10fps 提升到 15fps | Camera2Preview 和 TFLiteDetectionEngine 的限流间隔从 100ms 调整到 67ms，GPU 加速下快速模式实测 12fps |
+| 2026-06-24 | TFLite 模型精简为 3 个 | lightning-int8（快速）、lightning-fp16（标准）、thunder-fp16（精确） |
+| 2026-06-24 | 动作识别基于规则（非 ML） | 俯卧撑/深蹲/平板支撑使用角度阈值判断 |
+| 2026-06-25 | ActionType 整合到模板 | ActionType 移至 domain.model，Template 新增 actionType 字段 |
+| 2026-06-25 | Camera2 替代 CameraX | 计数界面改用 Camera2 实现更高帧率和更精确控制 |
+| 2026-06-25 | PoseCameraPreview 统一组件 | Camera2 预览 + 骨架绘制 + 摄像头切换 + 权限检查统一封装 |
+| 2026-06-27 | MediaPipe PoseLandmarker 迁移 | 使用 `com.google.mediapipe:tasks-vision` 替代手动 TFLite 推理 |
+| 2026-06-27 | GPU 优先自动回退 | 优先 GPU delegate，不支持时自动回退 CPU |
+| 2026-06-27 | 摄像头旋转角度修复 | `rotationAngle = sensorOrientation.toFloat()` 替代 `(360 - sensorOrientation) % 360` |
+| 2026-06-27 | 骨架刷新率优化（6项） | 见下方"性能优化详细记录" |
 
 ---
 
-## 重要文件速查
+## 性能优化详细记录（2026-06-27）
 
-| 文件路径 | 说明 |
-|---------|------|
-| `app/src/main/assets/single_pose_detection/` | TFLite 模型存放目录（3 个 .tflite 文件） |
-| `core/detection/tflite/PoseModelConfig.kt` | 模型配置枚举 |
-| `core/detection/tflite/TFLiteDetectionEngine.kt` | TFLite 主引擎 |
-| `ui/screen/counting/CountingScreen.kt` | 主计数界面 |
-| `ui/screen/counting/CountingViewModel.kt` | 计数界面 ViewModel（已集成 TimerService） |
-| `core/service/TimerService.kt` | 后台计时服务（平板支撑等） |
-| `core/service/TimerStateHolder.kt` | 计时状态共享桥接 |
-| `data/repository/BackupRepository.kt` | 导出/导入逻辑 |
-| `docs/superpowers/specs/2026-06-24-counter-app-plan.md` | 详细实现计划 |
-| `docs/project-memory/PROGRESS.md` | **本文件：项目进度** |
+**目标：** 骨架刷新率从 ~12fps 提升至 ~20-23fps（快速模式 GPU 加速）
 
----
+| # | 优化项 | 文件 | 改动说明 | 效果 |
+|---|--------|------|----------|------|
+| 1 | YUV→Bitmap Buffer 拷贝 | `Camera2Preview.kt` | 先将 Buffer 数据拷贝到 `byte[]`，再用数组索引访问，避免每次循环的 JNI 调用 | 减少 JNI 开销 |
+| 2 | Bitmap 旋转前移 | `Camera2Preview.kt` + `TFLiteDetectionEngine.kt` | 在 CameraThread 完成 Bitmap 旋转，TFLite 引擎不再旋转 | 减少推理线程工作量 |
+| 3 | 调整线程模型 | `Camera2Preview.kt` | YUV→Bitmap 和旋转从 CameraThread 移到 AnalysisThread，避免阻塞相机回调 | 相机回调不阻塞 |
+| 4 | 内存复用 | `TFLiteDetectionEngine.kt` | 复用 `previousKeypoints` 数组，避免每帧创建新数组 | 减少 GC 压力 |
+| 5 | 移除同步锁 | `TFLiteDetectionEngine.kt` | 移除 `synchronized(this)`，减少锁竞争 | 降低线程阻塞 |
+| 6 | MediaPipe VIDEO 模式 | `PoseLandmarkerHelper.kt` | 从 `IMAGE` 模式改为 `VIDEO` 模式，利用跨帧跟踪加速推理 | 推理加速 |
 
-## 迁移到新电脑的步骤
-
-1. **克隆 Git 仓库**
-   ```bash
-   git clone <repo-url>
-   cd Counter
-   ```
-
-2. **在 Android Studio 中打开项目**
-   - 首次打开时会自动下载 Gradle wrapper 和依赖
-   - 如果遇到 TFLite 依赖下载失败，请确保网络通畅或配置国内镜像
-
-3. **检查 TFLite 模型文件**
-   - 确认 `app/src/main/assets/single_pose_detection/` 下有 3 个 .tflite 文件
-   - 如果缺失，需要从 [MoveNet TFLite Models](https://www.tensorflow.org/lite/models/pose_estimation/overview) 下载
-
-4. **编译验证**
-   ```bash
-   ./gradlew :app:compileDebugKotlin
-   ```
-
-5. **阅读本文件了解进度**
-   - 查看"待实现功能"列表，决定下一步工作
+**结果：** 快速模式 GPU 加速下，骨架刷新率从 ~12fps 提升至 **20-23fps**。
 
 ---
 
 ## 已知问题
 
-| # | 问题 | 影响 | 解决方案 |
-|---|------|------|---------|
-| 1 | ~~`CountingViewModel` 不保存会话~~ | ✅ 已修复 | `startCounting()` 创建 RUNNING session，`stopCounting()` 更新为 COMPLETED |
-| 2 | ~~SettingsScreen "其他设置"占位文案~~ | ✅ 已修复 | 改为"关于"版本信息卡片 |
-| 3 | ~~前置摄像头骨架方向错误~~ | ✅ 已修复 | 使用硬件 LENS_FACING 判断，前置摄像头 screenY=(1-x)*H |
-| 4 | ~~TimerService 前台服务崩溃~~ | ✅ 已修复 | onStartCommand 开头统一调用 startForeground() 满足 Android 12+ 5秒规则 |
-| 5 | ~~架构设计 ActionType/Template 重复~~ | ✅ 已修复 | ActionType 整合到 Template，移除硬编码选择器 |
-| 6 | `ImageAnalysis.Builder.setTargetResolution()` 已弃用 | 编译警告 | 不影响功能，后续可迁移到 `setResolutionSelector()` |
-| 7 | PoseCameraPreview x轴镜像逻辑冗余 | 功能正常 | `toScreen` 中 x 轴两个分支结果相同，待确认是否简化 |
+| # | 问题 | 状态 | 说明 |
+|---|------|------|------|
+| 1 | 前置摄像头骨架左右镜像 | 已修复 | `toScreen` 中恢复 `1f - kp[0]` 前置镜像逻辑 |
+| 2 | 骨架 90 度旋转（头在左/右） | 已修复 | `rotationAngle = sensorOrientation.toFloat()` 正确旋转 Bitmap |
+| 3 | `ImageAnalysis.Builder.setTargetResolution()` 已弃用 | 编译警告 | 不影响功能，后续可迁移到 `setResolutionSelector()` |
+| 4 | Camera2Preview 未使用参数 | 编译警告 | `isFrontCamera` 和 `modifier` 参数在组件内未使用，功能正常 |
 
 ---
 
 ## 下一步建议
 
-**当前会话遗留（会话4）：**
-1. 硬件加速开关设置（SettingsScreen GPU/CPU 切换）
-2. 骨架刷新率提升至 20-23fps（调优限流、降低输入分辨率、GPU delegate 参数优化）
-3. 模板录制与模板使用联调（TemplateScreen 录制流程、TemplateViewModel 与 TFLiteDetectionEngine 集成）
+**当前会话遗留（会话5）：**
+1. 模板录制-计数联调（验证录制→保存→选择→计数的完整流程）
+2. 音频检测引擎真机调优
 
-**核心功能补全（让 App 真正可用）：**
-4. TFLite 真机验证角度阈值（俯卧撑/深蹲计数准确率）
-5. 模板匹配集成（自定义模板录制 → 特征提取 → 匹配检测）
-6. 音频检测引擎真机调优
+**近期可推进（让 App 更完整）：**
+4. 计时反馈增强（目标提醒、语音播报、庆祝动画）
+5. 网络备份完整实现（WebDAV 上传/下载）
+6. 低端设备性能优化
 
-**功能增强：**
-4. 计时反馈增强（目标时间提醒、语音播报）
-5. 网络备份 UI（WebDAV 配置界面）
-6. 实时阈值持久化
-
-**质量保障：**
+**长期质量保障：**
 7. 单元测试覆盖（Repository / Engine / ViewModel）
-8. 低端设备性能优化
+8. 多屏幕尺寸适配
