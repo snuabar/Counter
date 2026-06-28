@@ -40,6 +40,12 @@ class TemplateViewModel @Inject constructor(
     private val _showAddTemplateDialog = MutableStateFlow(false)
     val showAddTemplateDialog: StateFlow<Boolean> = _showAddTemplateDialog.asStateFlow()
 
+    private val _showEditTemplateDialog = MutableStateFlow(false)
+    val showEditTemplateDialog: StateFlow<Boolean> = _showEditTemplateDialog.asStateFlow()
+
+    private val _editingTemplateId = MutableStateFlow<Long?>(null)
+    val editingTemplateId: StateFlow<Long?> = _editingTemplateId.asStateFlow()
+
     private val _newTemplateName = MutableStateFlow("")
     val newTemplateName: StateFlow<String> = _newTemplateName.asStateFlow()
 
@@ -251,9 +257,11 @@ class TemplateViewModel @Inject constructor(
                 sensorType = sensorType,
                 mode = mode
             )
-            templateRepository.createTemplate(template)
+            val templateId = templateRepository.createTemplate(template)
             _showAddTemplateDialog.value = false
             _newTemplateName.value = ""
+            // 自动进入录制画面
+            startRecordingForTemplate(templateId, name)
         }
     }
 
@@ -261,6 +269,50 @@ class TemplateViewModel @Inject constructor(
         viewModelScope.launch {
             templateRepository.deleteTemplate(templateId)
         }
+    }
+
+    fun startEditTemplate(template: Template) {
+        _editingTemplateId.value = template.id
+        _newTemplateName.value = template.name
+        _selectedSensorType.value = template.sensorType
+        _selectedSessionMode.value = template.mode
+        _showEditTemplateDialog.value = true
+    }
+
+    fun updateTemplate(templateId: Long, name: String, sensorType: SensorType, mode: SessionMode) {
+        viewModelScope.launch {
+            val existing = templateRepository.getTemplate(templateId)
+            if (existing != null) {
+                val updated = existing.copy(
+                    name = name,
+                    sensorType = sensorType,
+                    mode = mode
+                )
+                templateRepository.createTemplate(updated)
+            }
+            _showEditTemplateDialog.value = false
+            _editingTemplateId.value = null
+            _newTemplateName.value = ""
+        }
+    }
+
+    fun updateTemplateName(templateId: Long, name: String) {
+        viewModelScope.launch {
+            val existing = templateRepository.getTemplate(templateId)
+            if (existing != null) {
+                val updated = existing.copy(name = name)
+                templateRepository.createTemplate(updated)
+            }
+            _showEditTemplateDialog.value = false
+            _editingTemplateId.value = null
+            _newTemplateName.value = ""
+        }
+    }
+
+    fun cancelEditTemplate() {
+        _showEditTemplateDialog.value = false
+        _editingTemplateId.value = null
+        _newTemplateName.value = ""
     }
 
     fun setShowAddTemplateDialog(show: Boolean) {
@@ -460,7 +512,10 @@ class TemplateViewModel @Inject constructor(
                         // Update existing template with feature vector
                         val existing = templateRepository.getTemplate(existingId)
                         if (existing != null) {
-                            val updated = existing.copy(featureVector = template.featureVector)
+                            val updated = existing.copy(
+                                featureVector = template.featureVector,
+                                keypointSequence = template.keypointSequence
+                            )
                             templateRepository.createTemplate(updated)
                         }
                     } else {

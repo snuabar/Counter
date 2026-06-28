@@ -53,6 +53,7 @@ class TemplateRepositoryImpl @Inject constructor(
         targetSeconds = targetSeconds,
         mediaPath = mediaPath,
         featureVector = featureVector,
+        keypointSequence = keypointSequence,
         threshold = threshold,
         poseType = poseType.name,
         createdAt = createdAt
@@ -69,6 +70,7 @@ class TemplateRepositoryImpl @Inject constructor(
         targetSeconds = targetSeconds,
         mediaPath = mediaPath,
         featureVector = featureVector,
+        keypointSequence = keypointSequence,
         threshold = threshold,
         poseType = PoseType.valueOf(poseType),
         createdAt = createdAt

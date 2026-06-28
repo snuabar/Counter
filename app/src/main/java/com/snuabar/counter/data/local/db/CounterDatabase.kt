@@ -12,7 +12,7 @@ import com.snuabar.counter.data.local.db.entity.*
         CountEventEntity::class,
         TemplateEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class CounterDatabase : RoomDatabase() {

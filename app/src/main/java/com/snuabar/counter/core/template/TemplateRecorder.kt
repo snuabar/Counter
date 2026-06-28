@@ -23,12 +23,14 @@ class TemplateRecorder {
     private var targetFrames = 0
     private val collectedFeatures = mutableListOf<FloatArray>()
     private val collectedPoseTypes = mutableListOf<PoseType>()
+    private val collectedRawKeypoints = mutableListOf<Array<FloatArray>>()
 
     // Progress callback: (currentFrame, targetFrames)
     var onProgressUpdate: ((Int, Int) -> Unit)? = null
 
     fun startRecording(durationSeconds: Int, fps: Int = 10) {
         collectedFeatures.clear()
+        collectedRawKeypoints.clear()
         lastRecordedFeatures = null
         targetFrames = durationSeconds * fps
         isRecording = true
@@ -64,6 +66,7 @@ class TemplateRecorder {
 
         lastRecordedFeatures = features.copyOf()
         collectedFeatures.add(features)
+        collectedRawKeypoints.add(keypoints.map { it.copyOf() }.toTypedArray())
         onProgressUpdate?.invoke(collectedFeatures.size, targetFrames)
     }
 
@@ -88,9 +91,8 @@ class TemplateRecorder {
         if (collectedFeatures.isEmpty()) return null
 
         // Extract the best segment (highest motion) to remove "dead frames"
-        // where the user is walking to/from the phone. This keeps only the
-        // frames where the actual action is happening.
-        val bestFeatures = extractBestSegment(collectedFeatures)
+        val (bestStart, windowSize) = extractBestSegmentIndices(collectedFeatures)
+        val bestFeatures = collectedFeatures.subList(bestStart, bestStart + windowSize)
 
         // Check template quality: motion score
         val motionScore = computeMotionScore(bestFeatures)
@@ -103,6 +105,10 @@ class TemplateRecorder {
 
         // Encode the best segment as ByteArray
         val featureBytes = encodeFeatureSequence(bestFeatures)
+
+        // Encode the raw keypoints for preview animation
+        val bestKeypoints = collectedRawKeypoints.subList(bestStart, bestStart + windowSize)
+        val keypointBytes = encodeKeypointSequence(bestKeypoints)
 
         // Determine the most common pose type from recorded frames
         val detectedPoseType = if (collectedPoseTypes.isNotEmpty()) {
@@ -117,6 +123,7 @@ class TemplateRecorder {
             type = TemplateType.CUSTOM,
             sensorType = SensorType.VISION,
             featureVector = featureBytes,
+            keypointSequence = keypointBytes,
             threshold = threshold,
             poseType = detectedPoseType
         )
@@ -124,20 +131,16 @@ class TemplateRecorder {
 
     /**
      * Extract the best segment (highest motion) from the recorded frames.
-     * This removes "dead frames" at the beginning and end where the user
-     * is walking to/from the phone.
-     *
-     * Uses a sliding window to find the segment with the highest motion score.
-     * The window size is 70% of the total frames (e.g., 21 frames out of 30).
+     * Returns Pair(startIndex, windowSize) for both features and raw keypoints.
      */
-    private fun extractBestSegment(features: List<FloatArray>): List<FloatArray> {
-        if (features.size < 10) return features
+    private fun extractBestSegmentIndices(features: List<FloatArray>): Pair<Int, Int> {
+        if (features.size < 10) return Pair(0, features.size)
 
         val totalFrames = features.size
         // Window size: 70% of total frames, at least 10 frames
         val windowSize = kotlin.math.max(10, (totalFrames * 0.7).toInt())
 
-        if (windowSize >= totalFrames) return features
+        if (windowSize >= totalFrames) return Pair(0, totalFrames)
 
         var bestScore = -1f
         var bestStart = 0
@@ -152,7 +155,7 @@ class TemplateRecorder {
             }
         }
 
-        return features.subList(bestStart, bestStart + windowSize)
+        return Pair(bestStart, windowSize)
     }
 
     /**
@@ -188,6 +191,7 @@ class TemplateRecorder {
         isRecording = false
         collectedFeatures.clear()
         collectedPoseTypes.clear()
+        collectedRawKeypoints.clear()
         lastRecordedFeatures = null
     }
 
@@ -308,6 +312,39 @@ class TemplateRecorder {
             for (value in frame) {
                 writeFloat(bytes, offset, value)
                 offset += 4
+            }
+        }
+
+        return bytes
+    }
+
+    /**
+     * Encode a sequence of raw keypoints into a ByteArray.
+     * Format: [4 bytes frame count][4 bytes keypoint count per frame][keypoint data...]
+     * Each keypoint: [x, y, confidence] as 3 floats (12 bytes)
+     */
+    private fun encodeKeypointSequence(keypoints: List<Array<FloatArray>>): ByteArray {
+        if (keypoints.isEmpty()) return ByteArray(0)
+
+        val frameCount = keypoints.size
+        val keypointCount = keypoints.first().size
+        val valuesPerKeypoint = 3 // x, y, confidence
+
+        val totalBytes = 8 + frameCount * keypointCount * valuesPerKeypoint * 4
+        val bytes = ByteArray(totalBytes)
+
+        // Write header
+        writeInt(bytes, 0, frameCount)
+        writeInt(bytes, 4, keypointCount)
+
+        // Write data
+        var offset = 8
+        for (frame in keypoints) {
+            for (kp in frame) {
+                for (i in 0 until valuesPerKeypoint) {
+                    writeFloat(bytes, offset, if (i < kp.size) kp[i] else 0f)
+                    offset += 4
+                }
             }
         }
 

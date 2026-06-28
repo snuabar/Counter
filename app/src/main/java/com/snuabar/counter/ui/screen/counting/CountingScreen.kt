@@ -53,6 +53,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.snuabar.counter.core.detection.tflite.action.ActionState
 import com.snuabar.counter.ui.component.CountdownOverlay
 import com.snuabar.counter.ui.component.PoseCameraPreview
+import com.snuabar.counter.ui.component.SkeletonAnimationPreview
 
 @Composable
 private fun OutlinedText(
@@ -255,7 +256,14 @@ fun CountingScreen(
                                         onClick = {
                                             viewModel.selectTemplate(template)
                                             templateExpanded = false
-                                        }
+                                        },
+                                        trailingIcon = if (template.keypointSequence != null) {{
+                                            SkeletonAnimationPreview(
+                                                keypointSequence = template.keypointSequence,
+                                                modifier = Modifier.size(60.dp),
+                                                frameDelayMs = 100
+                                            )
+                                        }} else null
                                     )
                                 }
                             }
