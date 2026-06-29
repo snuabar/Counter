@@ -40,5 +40,8 @@ data class CountEvent(
     val timestamp: Long = System.currentTimeMillis(),
     val count: Int,
     val confidence: Float,
-    val debugInfo: DetectionDebugInfo? = null
+    val debugInfo: DetectionDebugInfo? = null,
+    /** Velocity matching score (0~1). Higher means the current window's speed pattern
+     *  matches the template better. Used for "too fast / too slow" feedback. */
+    val velocityScore: Float = 0f
 )

@@ -32,7 +32,8 @@ enum class BodyPart {
  * - 13: left_knee, 14: right_knee
  */
 class CustomPoseActionDetector(
-    private val template: Template
+    private val template: Template,
+    private val config: DetectionConfig = DetectionConfig()
 ) : BasePoseActionDetector(ActionType.CUSTOM) {
 
     // Sliding window of recent feature vectors
@@ -40,6 +41,12 @@ class CustomPoseActionDetector(
 
     // Template feature sequence (decoded from bytes)
     private val templateFeatures: List<FloatArray> = decodeFeatureSequence(template.featureVector)
+    // Template velocity features (A: 速度/加速度特征)
+    private val templateVelFeatures: List<FloatArray> = if (config.useVelocityFeatures) {
+        computeVelocityFeatures(templateFeatures)
+    } else {
+        emptyList()
+    }
     // Fixed threshold for all templates
     private val matchThreshold: Float = 0.65f
 
@@ -50,6 +57,10 @@ class CustomPoseActionDetector(
     // Computed adaptively based on template periodicity in init
     private var customCooldownFrames = 20
     private var lastSimilarity: Float = 0f
+
+    // TODO-A: 速度/加速度特征已实现
+    // When config.useVelocityFeatures is enabled, both position and velocity DTW distances
+    // are computed and combined with weights (70% position + 30% velocity).
 
     // Rising-edge detection: only trigger when similarity crosses threshold from below
     private var prevSimilarity: Float = 0f
@@ -74,6 +85,29 @@ class CustomPoseActionDetector(
     // Template feature ranges for amplitude consistency check
     private var templateRanges: FloatArray = FloatArray(0)
     private var top3Dims: IntArray = IntArray(0)
+
+    // Feature dimension adaptive weights (B: 特征维度自适应加权)
+    private val featureWeights: FloatArray = if (config.useAdaptiveWeights) {
+        computeFeatureWeights(templateFeatures)
+    } else {
+        FloatArray(0)
+    }
+    // Velocity feature adaptive weights (B+A: 速度特征维度自适应加权)
+    private val velFeatureWeights: FloatArray = if (config.useAdaptiveWeights && config.useVelocityFeatures && templateVelFeatures.isNotEmpty()) {
+        computeFeatureWeights(templateVelFeatures)
+    } else {
+        FloatArray(0)
+    }
+
+    // Adaptive smoothing window size (E: 自适应平滑)
+    // Computed from template characteristics: fast actions get minimal smoothing (1),
+    // medium actions get default (3), slow actions get stronger smoothing (5).
+    private val adaptiveSmoothingWindowSize: Int = computeAdaptiveSmoothingWindowSize(templateFeatures)
+
+    // Online learning: updated template features (F: 模板在线学习)
+    // When enabled, the template is gradually adapted to the user's execution style.
+    private var onlineTemplateFeatures: List<FloatArray>? = null
+    private var onlineTemplateCount: Int = 0
 
     init {
         android.util.Log.d("CustomPoseActionDetector", "Loaded template: name=${template.name}, featureVectorSize=${template.featureVector?.size ?: 0}, decodedFrames=${templateFeatures.size}, windowSize=$windowSize")
@@ -137,6 +171,14 @@ class CustomPoseActionDetector(
             )
         )
 
+        // TODO-E: 自适应平滑预留点
+        // When config.useAdaptiveSmoothing is enabled, the currentFeatures should be
+        // smoothed using an adaptive window size based on the template's peakMotion:
+        // Fast actions (peakMotion > 1.0): window=1-2 (minimal smoothing to preserve sharp peaks)
+        // Medium actions: window=3 (default)
+        // Slow actions (peakMotion < 0.3): window=5 (stronger smoothing to reduce jitter)
+        // The smoothed features then replace currentFeatures for the sliding window.
+
         // Add to sliding window
         featureWindow.addLast(currentFeatures)
         if (featureWindow.size > windowSize) {
@@ -181,7 +223,11 @@ class CustomPoseActionDetector(
 
         // Check body part compatibility to prevent mismatched actions (e.g., squat template matched by arm waving)
         // Only block clear opposites: LEGS vs ARMS. Allow MIXED/UNKNOWN to pass.
-        val windowList = featureWindow.toList()
+        val windowList = if (config.useAdaptiveSmoothing && adaptiveSmoothingWindowSize > 1) {
+            smoothFeatures(featureWindow.toList(), adaptiveSmoothingWindowSize)
+        } else {
+            featureWindow.toList()
+        }
         val currentDominantPart = computeDominantBodyPart(windowList)
         if (isBodyPartOpposite(templateDominantPart, currentDominantPart)) {
             android.util.Log.d("CustomPoseActionDetector", "Body part opposite: template=$templateDominantPart, current=$currentDominantPart, skipping")
@@ -200,11 +246,50 @@ class CustomPoseActionDetector(
         }
 
         // Compare sliding window with template using DTW
-        val dtwDistance = computeDTW(windowList, templateFeatures)
+        val dtwPosDistance = if (config.useOnlineLearning && onlineTemplateFeatures != null) {
+            // Compare with both original and online templates, take the minimum distance (F: 模板在线学习)
+            val originalDistance = computeDTW(windowList, templateFeatures)
+            val onlineDistance = computeDTW(windowList, onlineTemplateFeatures!!)
+            kotlin.math.min(originalDistance, onlineDistance)
+        } else {
+            computeDTW(windowList, templateFeatures)
+        }
+
+        // Compute velocity DTW distance if enabled (A: 速度/加速度特征)
+        val dtwVelDistance = if (config.useVelocityFeatures && templateVelFeatures.isNotEmpty()) {
+            val windowVelFeatures = computeVelocityFeatures(windowList)
+            if (windowVelFeatures.isNotEmpty()) {
+                computeDTW(windowVelFeatures, templateVelFeatures, velFeatureWeights)
+            } else {
+                0f
+            }
+        } else {
+            0f
+        }
 
         // Normalize DTW distance by path length for fair comparison
         val pathLength = (windowList.size + templateFeatures.size) / 2f
-        val avgDtwDist = dtwDistance / pathLength
+        val avgDtwPosDist = dtwPosDistance / pathLength
+
+        // Combine position and velocity distances (A: 速度/加速度特征)
+        val avgDtwDist = if (config.useVelocityFeatures && templateVelFeatures.isNotEmpty()) {
+            val velPathLength = (windowList.size + templateVelFeatures.size) / 2f
+            val avgDtwVelDist = dtwVelDistance / velPathLength
+            0.7f * avgDtwPosDist + 0.3f * avgDtwVelDist
+        } else {
+            avgDtwPosDist
+        }
+
+        // Velocity score: how well the current window's speed pattern matches the template.
+        // 0 = very different speed (too fast or too slow); 1 = perfectly matched speed.
+        val velocityScore = if (config.useVelocityFeatures && templateVelFeatures.isNotEmpty()) {
+            val velPathLength = (windowList.size + templateVelFeatures.size) / 2f
+            val avgDtwVelDist = dtwVelDistance / velPathLength
+            kotlin.math.exp(-avgDtwVelDist * 0.5f).coerceIn(0f, 1f)
+        } else {
+            // Fallback: derive a coarse speed match from position similarity
+            kotlin.math.exp(-avgDtwPosDist * 0.3f).coerceIn(0f, 1f)
+        }
 
         // Direct similarity: no templateInternalDist normalization
         // This prevents templates with small internal motion from being matched too easily
@@ -249,6 +334,10 @@ class CustomPoseActionDetector(
             isLocked = true  // Lock until similarity drops below threshold
             peakSimilarity = similarity
             isDetected = true
+            // F: 模板在线学习
+            if (config.useOnlineLearning) {
+                updateTemplateOnline(windowList)
+            }
             android.util.Log.i("CustomPoseActionDetector", "ACTION DETECTED! count=$count, similarity=$similarity")
         } else if (wasDetected && peakSimilarity > 0 && similarity < peakSimilarity * 0.7f) {
             // Similarity dropped 30% from peak → action is over, allow re-triggering
@@ -279,7 +368,8 @@ class CustomPoseActionDetector(
                 currentState = currentState,
                 count = count,
                 confidence = similarity,
-                debugInfo = "Action detected! similarity=$similarity",
+                velocityScore = velocityScore,
+                debugInfo = "Action detected! similarity=$similarity, velocityScore=$velocityScore",
                 structuredDebugInfo = DetectionDebugInfo(
                     state = currentState, confidence = similarity,
                     message = "Action detected! similarity=${String.format(Locale.getDefault(), "%.2f", similarity)}"
@@ -292,7 +382,8 @@ class CustomPoseActionDetector(
                 currentState = currentState,
                 count = count,
                 confidence = similarity,
-                debugInfo = "similarity=$similarity, threshold=$matchThreshold",
+                velocityScore = velocityScore,
+                debugInfo = "similarity=$similarity, threshold=$matchThreshold, velocityScore=$velocityScore",
                 structuredDebugInfo = DetectionDebugInfo(
                     state = currentState, confidence = similarity,
                     message = "similarity=${String.format(Locale.getDefault(), "%.2f", similarity)}, threshold=$matchThreshold"
@@ -398,6 +489,15 @@ class CustomPoseActionDetector(
         val shoulderWidth = kotlin.math.abs(leftShoulder[0] - rightShoulder[0])
         val handDistanceRatio = handDistance / (shoulderWidth + 1e-6f)
 
+        // D: Height/distance normalization
+        // Normalize bodyHeight by shoulderWidth to eliminate distance effects.
+        // When enabled, bodyHeight becomes a body-proportion invariant (body height / shoulder width).
+        val normalizedBodyHeight = if (config.useNormalization && shoulderWidth > 0.01f) {
+            bodyHeight / shoulderWidth
+        } else {
+            bodyHeight
+        }
+
         // Normalize angles to [0, 1] range (divide by 180)
         return floatArrayOf(
             leftElbowAngle / 180f,
@@ -410,7 +510,7 @@ class CustomPoseActionDetector(
             rightKneeAngle / 180f,
             hipCenterY,            // 9th dim: hip center vertical position [0,1]
             kneeAngleSum,          // 10th dim: knee angle sum [0,1], smaller when deeper squat
-            bodyHeight,            // 11th dim: body height (shoulder to ankle)
+            normalizedBodyHeight,  // 11th dim: body height (shoulder to ankle), normalized by shoulder width when enabled
             ankleY,                // 12th dim: average ankle Y position
             handDistanceRatio      // 13th dim: hand distance / shoulder width (0=clapping, 1=waving)
         )
@@ -451,8 +551,11 @@ class CustomPoseActionDetector(
      * Compute DTW distance between two feature sequences with Sakoe-Chiba constraint.
      * Each element is a FloatArray representing joint angles at one frame.
      * The constraint limits warping to prevent matching all frames to a single template frame.
+     *
+     * When useAdaptiveWeights is enabled, uses weighted Euclidean distance based on
+     * template feature variances to emphasize dimensions with the most motion.
      */
-    private fun computeDTW(a: List<FloatArray>, b: List<FloatArray>): Float {
+    private fun computeDTW(a: List<FloatArray>, b: List<FloatArray>, weights: FloatArray = featureWeights): Float {
         val n = a.size
         val m = b.size
         if (n == 0 || m == 0) return Float.MAX_VALUE
@@ -469,7 +572,11 @@ class CustomPoseActionDetector(
             val jMin = kotlin.math.max(1, (i * m / n) - bandWidth)
             val jMax = kotlin.math.min(m, (i * m / n) + bandWidth)
             for (j in jMin..jMax) {
-                val cost = euclideanDistance(a[i - 1], b[j - 1])
+                val cost = if (config.useAdaptiveWeights && weights.isNotEmpty()) {
+                    weightedEuclideanDistance(a[i - 1], b[j - 1], weights)
+                } else {
+                    euclideanDistance(a[i - 1], b[j - 1])
+                }
                 dtw[i][j] = cost + minOf(dtw[i - 1][j], dtw[i][j - 1], dtw[i - 1][j - 1])
             }
         }
@@ -488,6 +595,42 @@ class CustomPoseActionDetector(
             sum += diff * diff
         }
         return sqrt(sum)
+    }
+
+    /**
+     * Compute weighted Euclidean distance between two feature vectors.
+     * Dimensions with higher weights contribute more to the distance.
+     * Used when useAdaptiveWeights is enabled to emphasize dominant motion dimensions.
+     */
+    private fun weightedEuclideanDistance(a: FloatArray, b: FloatArray, weights: FloatArray): Float {
+        var sum = 0f
+        for (i in a.indices) {
+            val diff = a[i] - b[i]
+            sum += weights[i] * diff * diff
+        }
+        return sqrt(sum)
+    }
+
+    /**
+     * Compute adaptive weights for each feature dimension based on template variance.
+     * Dimensions with larger variance (more motion) get higher weights.
+     * Weights are normalized so their sum equals the number of dimensions.
+     */
+    private fun computeFeatureWeights(features: List<FloatArray>): FloatArray {
+        if (features.isEmpty() || features[0].isEmpty()) return FloatArray(0)
+        val dim = features[0].size
+        val variances = FloatArray(dim) { d ->
+            val values = features.map { it[d] }
+            val mean = values.sum() / values.size
+            values.map { (it - mean) * (it - mean) }.sum() / values.size
+        }
+        // Normalize: variance-based weights sum to dim (average weight = 1.0)
+        val totalVariance = variances.sum()
+        return if (totalVariance > 0) {
+            FloatArray(dim) { i -> (variances[i] / totalVariance) * dim }
+        } else {
+            FloatArray(dim) { 1f }
+        }
     }
 
     private fun minOf(a: Float, b: Float, c: Float): Float {
@@ -857,5 +1000,106 @@ class CustomPoseActionDetector(
     private fun readFloat(bytes: ByteArray, offset: Int): Float {
         val bits = readInt(bytes, offset)
         return Float.fromBits(bits)
+    }
+
+    // ===== E: Adaptive Smoothing =====
+
+    /**
+     * Compute adaptive smoothing window size based on template characteristics.
+     * Fast actions (few frames, high motion): minimal smoothing (1) to preserve sharp peaks.
+     * Medium actions: default smoothing (3).
+     * Slow actions (many frames, low motion): stronger smoothing (5) to reduce jitter.
+     */
+    private fun computeAdaptiveSmoothingWindowSize(features: List<FloatArray>): Int {
+        if (features.size < 15) return 1 // Fast action: no smoothing
+        if (features.size > 40) return 5 // Slow action: stronger smoothing
+        return 3 // Medium action: default smoothing
+    }
+
+    /**
+     * Smooth a sequence of feature vectors using sliding average.
+     * Each dimension is smoothed independently with a symmetric window.
+     * Edge frames use replicate padding (copy nearest valid value).
+     * @param windowSize must be odd (1, 3, 5...). Window size of 1 returns the original sequence.
+     */
+    private fun smoothFeatures(features: List<FloatArray>, windowSize: Int): List<FloatArray> {
+        if (windowSize <= 1 || features.size < windowSize) return features
+        val halfWindow = windowSize / 2
+        val featureDim = features[0].size
+        val result = mutableListOf<FloatArray>()
+
+        for (i in features.indices) {
+            val smoothed = FloatArray(featureDim)
+            for (d in 0 until featureDim) {
+                var sum = 0f
+                var count = 0
+                for (j in -halfWindow..halfWindow) {
+                    val idx = i + j
+                    if (idx in features.indices) {
+                        sum += features[idx][d]
+                        count++
+                    }
+                }
+                smoothed[d] = sum / count
+            }
+            result.add(smoothed)
+        }
+        return result
+    }
+
+    /**
+     * Compute velocity features from a sequence of position features.
+     * Velocity at frame i = position[i+1] - position[i] (forward difference).
+     * The last frame's velocity is copied from the previous frame.
+     * Used when useVelocityFeatures is enabled to incorporate motion dynamics into DTW matching.
+     */
+    private fun computeVelocityFeatures(features: List<FloatArray>): List<FloatArray> {
+        if (features.size < 2) return emptyList()
+        val result = mutableListOf<FloatArray>()
+        for (i in features.indices) {
+            val vel = if (i < features.size - 1) {
+                FloatArray(features[0].size) { d -> features[i + 1][d] - features[i][d] }
+            } else {
+                // Last frame: copy previous velocity
+                FloatArray(features[0].size) { d -> features[i][d] - features[i - 1][d] }
+            }
+            result.add(vel)
+        }
+        return result
+    }
+
+    // ===== F: Online Learning =====
+
+    /**
+     * Update the online template with the current detected window.
+     * Uses a small learning rate (alpha) to gradually adapt the template to the user's style.
+     * The first detection initializes the online template; subsequent detections apply
+     * incremental updates to overlapping frames.
+     */
+    private fun updateTemplateOnline(windowList: List<FloatArray>) {
+        if (!config.useOnlineLearning) return
+        if (windowList.isEmpty()) return
+
+        if (onlineTemplateFeatures == null) {
+            // First detection: initialize online template with the current window
+            onlineTemplateFeatures = windowList.map { it.copyOf() }
+            onlineTemplateCount = 1
+            android.util.Log.i("CustomPoseActionDetector", "Online learning: initialized template with ${windowList.size} frames")
+        } else {
+            // Incremental update: blend current window into existing template
+            val alpha = 0.1f // Learning rate
+            val template = onlineTemplateFeatures!!
+            val minLength = kotlin.math.min(template.size, windowList.size)
+            if (minLength == 0) return
+            val featureDim = template[0].size
+
+            for (i in 0 until minLength) {
+                for (d in 0 until featureDim) {
+                    template[i][d] = (1 - alpha) * template[i][d] + alpha * windowList[i][d]
+                }
+            }
+            onlineTemplateCount++
+            android.util.Log.i("CustomPoseActionDetector", "Online learning: updated template (count=$onlineTemplateCount, alpha=$alpha)")
+        }
     }
 }

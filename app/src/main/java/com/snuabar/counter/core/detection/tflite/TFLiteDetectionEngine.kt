@@ -318,6 +318,7 @@ class TFLiteDetectionEngine @Inject constructor(
             _countEvents.value = CountEvent(
                 count = count,
                 confidence = result.confidence,
+                velocityScore = result.velocityScore,
                 debugInfo = result.structuredDebugInfo
             )
         }
