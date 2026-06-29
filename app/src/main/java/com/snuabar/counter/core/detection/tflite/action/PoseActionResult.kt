@@ -26,7 +26,10 @@ data class PoseActionResult(
     val count: Int,
     val confidence: Float = 0f,
     val debugInfo: String = "",
-    val structuredDebugInfo: DetectionDebugInfo = DetectionDebugInfo()
+    val structuredDebugInfo: DetectionDebugInfo = DetectionDebugInfo(),
+    /** Velocity matching score (0~1). Higher means the current window's speed pattern
+     *  matches the template better. Used for "too fast / too slow" feedback. */
+    val velocityScore: Float = 0f
 )
 
 enum class ActionState {

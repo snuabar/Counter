@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -108,6 +109,7 @@ fun CountingScreen(
     val keypoints by viewModel.keypoints.collectAsState()
     val fps by viewModel.fps.collectAsState()
     val debugInfo by viewModel.debugInfo.collectAsState()
+    val velocityScore by viewModel.velocityScore.collectAsState()
     val isCountingDown by viewModel.isCountingDown.collectAsState()
     val countdownSeconds by viewModel.countdownSeconds.collectAsState()
 
@@ -183,6 +185,55 @@ fun CountingScreen(
                     text = "置信度: ${(confidence * 100).toInt()}%",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Speed matching indicator: shows how well current speed matches the template.
+            // Green = good match, Yellow = slightly off, Red = too fast or too slow.
+            val velocityColor = when {
+                velocityScore >= 0.7f -> Color(0xFF4CAF50) // Green
+                velocityScore >= 0.4f -> Color(0xFFFFC107) // Yellow
+                else -> Color(0xFFF44336) // Red
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "速度匹配: ",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimary
+                )
+                Box(
+                    modifier = Modifier
+                        .width(80.dp)
+                        .height(6.dp)
+                        .background(Color.Gray.copy(alpha = 0.3f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .fillMaxWidth(velocityScore.coerceIn(0f, 1f))
+                            .background(velocityColor)
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "${(velocityScore * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = velocityColor
+                )
+            }
+            if (velocityScore < 0.5f && isRunning) {
+                val velocityText = when {
+                    velocityScore >= 0.4f -> "速度偏快/偏慢"
+                    else -> "速度不匹配"
+                }
+                Text(
+                    text = velocityText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = velocityColor
                 )
             }
 

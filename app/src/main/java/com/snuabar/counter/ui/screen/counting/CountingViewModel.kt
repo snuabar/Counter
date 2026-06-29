@@ -69,6 +69,11 @@ class CountingViewModel @Inject constructor(
     private val _confidence = MutableStateFlow(0f)
     val confidence: StateFlow<Float> = _confidence.asStateFlow()
 
+    // Velocity matching score (0~1): how well current speed matches the template.
+    // Used for "too fast / too slow" feedback in the counting screen.
+    private val _velocityScore = MutableStateFlow(0f)
+    val velocityScore: StateFlow<Float> = _velocityScore.asStateFlow()
+
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
@@ -347,7 +352,6 @@ class CountingViewModel @Inject constructor(
     private var realtimeSaveJob: Job? = null
 
     // Cached detection preferences
-    private var cachedThreshold: Float = 0.7f
     private var cachedPoseModelConfig: PoseModelConfig = PoseModelConfig.STANDARD
 
     init {
@@ -367,16 +371,12 @@ class CountingViewModel @Inject constructor(
             currentEngine?.countEvents?.collect { event ->
                 _currentCount.value = event.count
                 _confidence.value = event.confidence
+                _velocityScore.value = event.velocityScore
                 event.debugInfo?.let { _debugInfo.value = it }
             }
         }
 
-        // Cache threshold and pose model config from preferences
-        viewModelScope.launch {
-            detectionPreferences.thresholdFlow.collect { value ->
-                cachedThreshold = value
-            }
-        }
+        // Cache pose model config from preferences
         viewModelScope.launch {
             detectionPreferences.poseModelConfigFlow.collect { value ->
                 val changed = cachedPoseModelConfig != value
@@ -418,7 +418,6 @@ class CountingViewModel @Inject constructor(
             val config = DetectionConfig(
                 sensorType = SensorType.VISION,
                 poseModelConfig = cachedPoseModelConfig,
-                threshold = cachedThreshold,
                 actionType = _actionType.value
             )
             engine.startPreview(config)
@@ -467,7 +466,6 @@ class CountingViewModel @Inject constructor(
         val config = DetectionConfig(
             sensorType = SensorType.VISION,
             poseModelConfig = cachedPoseModelConfig,
-            threshold = cachedThreshold,
             actionType = _actionType.value
         )
         engine.startPreview(config)
@@ -486,6 +484,7 @@ class CountingViewModel @Inject constructor(
                 currentEngine?.countEvents?.collect { event ->
                     _currentCount.value = event.count
                     _confidence.value = event.confidence
+                    _velocityScore.value = event.velocityScore
                     event.debugInfo?.let { _debugInfo.value = it }
                 }
             }
@@ -614,7 +613,6 @@ class CountingViewModel @Inject constructor(
             currentEngine?.start(
                 DetectionConfig(
                     sensorType = actualSensorType,
-                    threshold = cachedThreshold,
                     mode = actualMode,
                     targetSeconds = actualTargetSeconds,
                     targetResolution = targetResolution,

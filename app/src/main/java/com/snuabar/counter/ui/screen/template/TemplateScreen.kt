@@ -24,8 +24,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -38,6 +40,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -56,6 +59,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
@@ -91,6 +95,8 @@ fun TemplateScreen(
     val recordingTemplateName by viewModel.recordingTemplateName.collectAsState()
 
     val isRecordingComplete by viewModel.isRecordingComplete.collectAsState()
+
+    val context = LocalContext.current
 
     // Expanded template ID for swipe-to-delete
     var expandedTemplateId by remember { mutableStateOf<Long?>(null) }
@@ -142,9 +148,13 @@ fun TemplateScreen(
                     isRecordingComplete = isRecordingComplete,
                     onStop = {
                         viewModel.stopRecording(
-                            onSuccess = { /* template saved */ },
+                            onSuccess = {
+                                // Recording complete, overlay will show success state
+                            },
                             onFailure = { message ->
-                                /* Show error message in snackbar or toast */
+                                if (!message.startsWith("QUALITY_LOW:")) {
+                                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                     },
@@ -223,97 +233,150 @@ private fun RecordingPanel(
     val context = LocalContext.current
     val keypoints by viewModel.keypoints.collectAsState()
     val fps by viewModel.fps.collectAsState()
-    val isRecording by viewModel.isRecording.collectAsState()
-
-    val isRecordingComplete by viewModel.isRecordingComplete.collectAsState()
-
-    // Camera selection state
+    val isPreviewMode by viewModel.isPreviewMode.collectAsState()
+    val previewKeypointSequence by viewModel.previewKeypointSequence.collectAsState()
+    val segmentStart by viewModel.segmentStart.collectAsState()
+    val segmentEnd by viewModel.segmentEnd.collectAsState()
+    val computedScore by viewModel.computedScore.collectAsState()
+    val totalFrames by viewModel.totalRecordedFrames.collectAsState()
     val isFrontCamera by viewModel.isFrontCamera.collectAsState()
     val selectedCameraId by viewModel.selectedCameraId.collectAsState()
     val availableCameras by viewModel.availableCameras.collectAsState()
-    // Use selected camera or let ViewModel handle default
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Camera preview with pose overlay (full screen)
-        Box(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            PoseCameraPreview(
-                cameraId = selectedCameraId ?: "0",
-                onBitmap = { bitmap -> viewModel.processBitmap(bitmap) },
-                keypoints = keypoints,
-                fps = fps,
-                showCameraSwitch = true,
-                availableCameras = availableCameras,
-                selectedCameraId = selectedCameraId,
-                isFrontCamera = isFrontCamera,
-                onCameraSwitch = { viewModel.selectCamera(it) },
-                onToggleCamera = { viewModel.toggleCamera() },
-                modifier = Modifier.fillMaxSize()
-            )
-            // Recording / Countdown indicator
-            if (isCountingDown) {
-                CountdownOverlay(
-                    seconds = countdownSeconds,
-                    message = "请退后，全身入镜",
-                    onCancel = onCancel
-                )
-            } else {
-                if (isRecordingComplete) {
-                    // Recording complete overlay
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .align(Alignment.Center),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                imageVector = Icons.Filled.CheckCircle,
-                                contentDescription = "录制完成",
-                                tint = Color(0xFF4CAF50),
-                                modifier = Modifier.size(120.dp)
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "录制完成",
-                                style = MaterialTheme.typography.displayMedium.copy(
-                                    color = Color(0xFF4CAF50),
-                                    fontSize = 48.sp
+        if (isPreviewMode) {
+            // Preview mode: skeleton animation + slider + score + buttons
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Skeleton preview
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .background(Color.Black)
+                ) {
+                    SkeletonAnimationPreview(
+                        keypointSequence = previewKeypointSequence,
+                        modifier = Modifier.fillMaxSize(),
+                        frameDelayMs = 100
+                    )
+                }
+
+                // Score and controls panel
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val isPassing = computedScore >= 50f
+                    val scoreColor = if (isPassing) MaterialTheme.colorScheme.primary else Color(0xFFF44336)
+
+                    // Score
+                    Text(
+                        text = "评分: ${String.format("%.0f", computedScore)}分",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            color = scoreColor,
+                            fontSize = 32.sp
+                        )
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // Range slider
+                    if (totalFrames > 0) {
+                        RangeSlider(
+                            value = segmentStart.toFloat()..segmentEnd.toFloat(),
+                            onValueChange = { range ->
+                                val newStart = (range.start + 0.5f).toInt().coerceIn(0, totalFrames)
+                                val newEnd = (range.endInclusive + 0.5f).toInt().coerceIn(0, totalFrames)
+                                if (newStart < newEnd) {
+                                    viewModel.updateSegmentRange(newStart, newEnd)
+                                }
+                            },
+                            valueRange = 0f..totalFrames.toFloat(),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Text(
+                            text = "帧范围: $segmentStart - $segmentEnd (共${segmentEnd - segmentStart}帧)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Buttons
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (isPassing) {
+                            Button(onClick = {
+                                viewModel.savePreviewTemplate(
+                                    onSuccess = {},
+                                    onFailure = { msg -> android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show() }
                                 )
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "可以停止动作了",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    color = Color.White
-                                )
-                            )
+                            }) {
+                                Text("保存")
+                            }
+                        } else {
+                            Button(onClick = {
+                                viewModel.cancelRecording()
+                                viewModel.startRecording(templateName)
+                            }) {
+                                Text("重录")
+                            }
+                        }
+                        OutlinedButton(onClick = onCancel) {
+                            Text("取消")
                         }
                     }
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.FiberManualRecord,
-                        contentDescription = "录制中",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(16.dp)
-                            .size(32.dp)
+                }
+            }
+        } else {
+            // Recording mode: camera preview + controls
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Camera preview with pose overlay (full screen)
+                PoseCameraPreview(
+                    cameraId = selectedCameraId ?: "0",
+                    onBitmap = { bitmap -> viewModel.processBitmap(bitmap) },
+                    keypoints = keypoints,
+                    fps = fps,
+                    showCameraSwitch = true,
+                    availableCameras = availableCameras,
+                    selectedCameraId = selectedCameraId,
+                    isFrontCamera = isFrontCamera,
+                    onCameraSwitch = { viewModel.selectCamera(it) },
+                    onToggleCamera = { viewModel.toggleCamera() },
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                // Auto-stop when target is reached
+                if (!isCountingDown) {
+                    LaunchedEffect(isRecordingComplete) {
+                        if (isRecordingComplete) {
+                            onStop()
+                        }
+                    }
+                }
+
+                // Recording / Countdown indicator
+                if (isCountingDown) {
+                    CountdownOverlay(
+                        seconds = countdownSeconds,
+                        message = "请退后，全身入镜",
+                        onCancel = onCancel
                     )
                 }
             }
-        }
 
-        // Bottom panel (overlay on preview)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .background(Color.Black.copy(alpha = 0.5f))
-                .padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+            // Bottom panel (overlay on preview)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(Color.Black.copy(alpha = 0.5f))
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 if (isCountingDown) {
                     Text(
                         text = "准备录制: $templateName",
@@ -331,15 +394,15 @@ private fun RecordingPanel(
                     }
                 } else {
                     Text(
-                        text = if (isRecordingComplete) "✓ 录制完成" else "正在录制: $templateName",
+                        text = "正在录制: $templateName",
                         style = MaterialTheme.typography.titleMedium
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (isRecordingComplete) "可以停止动作了" else "帧数: $progress / $targetFrames",
+                        text = "帧数: $progress / $targetFrames",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    if (targetFrames > 0 && !isRecordingComplete) {
+                    if (targetFrames > 0) {
                         LinearProgressIndicator(
                             progress = (progress.toFloat() / targetFrames.toFloat()).coerceIn(0f, 1f),
                             modifier = Modifier
@@ -348,20 +411,14 @@ private fun RecordingPanel(
                         )
                     }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = onStop) {
-                            Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("保存")
-                        }
-                        OutlinedButton(onClick = onCancel) {
-                            Text("取消")
-                        }
+                    OutlinedButton(onClick = onCancel) {
+                        Text("取消")
                     }
                 }
             }
         }
     }
+}
 
 @Composable
 private fun EmptyTemplateState() {

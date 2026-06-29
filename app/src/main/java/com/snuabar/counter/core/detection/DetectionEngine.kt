@@ -13,7 +13,6 @@ interface DetectionEngine {
     fun pause()
     fun resume()
     fun stop()
-    fun setThreshold(threshold: Float)
     fun isRunning(): Boolean
     val countEvents: Flow<CountEvent>
     /** Notify the engine about current camera configuration */
@@ -27,7 +26,6 @@ interface DetectionEngineFactory {
 data class DetectionConfig(
     val sensorType: SensorType,
     val templateId: Long? = null,
-    val threshold: Float = 0.7f,
     val mode: SessionMode = SessionMode.COUNTING,
     val targetSeconds: Int? = null,
     val targetResolution: android.util.Size = android.util.Size(640, 360),
@@ -42,5 +40,8 @@ data class CountEvent(
     val timestamp: Long = System.currentTimeMillis(),
     val count: Int,
     val confidence: Float,
-    val debugInfo: DetectionDebugInfo? = null
+    val debugInfo: DetectionDebugInfo? = null,
+    /** Velocity matching score (0~1). Higher means the current window's speed pattern
+     *  matches the template better. Used for "too fast / too slow" feedback. */
+    val velocityScore: Float = 0f
 )

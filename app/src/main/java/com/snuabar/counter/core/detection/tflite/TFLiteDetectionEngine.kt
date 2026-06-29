@@ -49,7 +49,6 @@ class TFLiteDetectionEngine @Inject constructor(
 
     private var poseLandmarkerHelper: PoseLandmarkerHelper? = null
     private var isFrontCamera = false
-    private var threshold = 0.7f
     private var isRunning = false
     private var isPaused = false
     private var count = 0
@@ -91,7 +90,6 @@ class TFLiteDetectionEngine @Inject constructor(
     override fun start(config: DetectionConfig) {
         if (isRunning) {
             // Already running (e.g. from preview mode) - just reset action detector for counting
-            threshold = config.threshold
             count = 0
             _countEvents.value = CountEvent(count = 0, confidence = 0f)
             currentActionType = config.actionType
@@ -103,7 +101,6 @@ class TFLiteDetectionEngine @Inject constructor(
         }
         isRunning = true
         isPaused = false
-        threshold = config.threshold
         count = 0
         _countEvents.value = CountEvent(count = 0, confidence = 0f)
 
@@ -199,10 +196,6 @@ class TFLiteDetectionEngine @Inject constructor(
         actionDetector = null
         count = 0
         _countEvents.value = CountEvent(count = 0, confidence = 0f)
-    }
-
-    override fun setThreshold(threshold: Float) {
-        this.threshold = threshold
     }
 
     /**
@@ -325,6 +318,7 @@ class TFLiteDetectionEngine @Inject constructor(
             _countEvents.value = CountEvent(
                 count = count,
                 confidence = result.confidence,
+                velocityScore = result.velocityScore,
                 debugInfo = result.structuredDebugInfo
             )
         }
@@ -352,11 +346,14 @@ class TFLiteDetectionEngine @Inject constructor(
         }
 
         // Map each COCO keypoint (MediaPipe 33 → COCO 17)
+        // Head: nose, eyes (ears removed, replaced with index fingers for hand contact detection)
         coco17[0]  = floatArrayOf(landmarks[0].x(), landmarks[0].y(), landmarks[0].visibility().orElse(0f)) // nose → nose
         coco17[1]  = avg(1, 2, 3) // left_eye → avg of left_eye_inner, left_eye, left_eye_outer
         coco17[2]  = avg(4, 5, 6) // right_eye → avg of right_eye_inner, right_eye, right_eye_outer
-        coco17[3]  = floatArrayOf(landmarks[7].x(), landmarks[7].y(), landmarks[7].visibility().orElse(0f)) // left_ear
-        coco17[4]  = floatArrayOf(landmarks[8].x(), landmarks[8].y(), landmarks[8].visibility().orElse(0f)) // right_ear
+        // Replaced ears with index fingers for better hand contact detection (e.g., clapping)
+        coco17[3]  = floatArrayOf(landmarks[19].x(), landmarks[19].y(), landmarks[19].visibility().orElse(0f)) // left_index ← was left_ear
+        coco17[4]  = floatArrayOf(landmarks[20].x(), landmarks[20].y(), landmarks[20].visibility().orElse(0f)) // right_index ← was right_ear
+        // Body
         coco17[5]  = floatArrayOf(landmarks[11].x(), landmarks[11].y(), landmarks[11].visibility().orElse(0f)) // left_shoulder
         coco17[6]  = floatArrayOf(landmarks[12].x(), landmarks[12].y(), landmarks[12].visibility().orElse(0f)) // right_shoulder
         coco17[7]  = floatArrayOf(landmarks[13].x(), landmarks[13].y(), landmarks[13].visibility().orElse(0f)) // left_elbow

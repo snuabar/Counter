@@ -20,7 +20,9 @@ import kotlin.math.atan2
 class TemplateRecorder {
 
     private var isRecording = false
+    private var isPaused = false
     private var targetFrames = 0
+    private var receivedFrames = 0
     private val collectedFeatures = mutableListOf<FloatArray>()
     private val collectedPoseTypes = mutableListOf<PoseType>()
     private val collectedRawKeypoints = mutableListOf<Array<FloatArray>>()
@@ -28,10 +30,12 @@ class TemplateRecorder {
     // Progress callback: (currentFrame, targetFrames)
     var onProgressUpdate: ((Int, Int) -> Unit)? = null
 
-    fun startRecording(durationSeconds: Int, fps: Int = 10) {
+    fun startRecording(durationSeconds: Int, fps: Int = 30) {
         collectedFeatures.clear()
         collectedRawKeypoints.clear()
         lastRecordedFeatures = null
+        receivedFrames = 0
+        isPaused = false
         targetFrames = durationSeconds * fps
         isRecording = true
     }
@@ -42,10 +46,19 @@ class TemplateRecorder {
     /**
      * Add a frame of keypoints (17 COCO keypoints, each [x, y, confidence]).
      * Frames with insufficient motion are skipped to avoid recording static poses.
+     * Automatically pauses when target duration is reached.
      */
     fun addKeypoints(keypoints: Array<FloatArray>) {
-        if (!isRecording) return
-        if (collectedFeatures.size >= targetFrames) return
+        if (!isRecording || isPaused) return
+        if (receivedFrames >= targetFrames + 60) return
+
+        receivedFrames++
+        onProgressUpdate?.invoke(receivedFrames, targetFrames)
+
+        // Auto-pause when target duration is reached to prevent recording unwanted frames
+        if (receivedFrames >= targetFrames) {
+            isPaused = true
+        }
 
         val features = extractAngleFeatures(keypoints) ?: return
 
@@ -53,21 +66,10 @@ class TemplateRecorder {
         val pose = PoseDetector.detectPose(keypoints)
         collectedPoseTypes.add(pose)
 
-        // Real-time motion detection: skip frames where the person is not moving enough.
-        // This prevents the progress bar from advancing when standing still.
-        val last = lastRecordedFeatures
-        if (last != null) {
-            val motion = computeFrameMotion(last, features)
-            if (motion < 0.05f) {
-                // Too little motion, skip this frame (but keep recording)
-                return
-            }
-        }
-
+        // Save features for motion comparison in stopAndBuildTemplate
         lastRecordedFeatures = features.copyOf()
         collectedFeatures.add(features)
         collectedRawKeypoints.add(keypoints.map { it.copyOf() }.toTypedArray())
-        onProgressUpdate?.invoke(collectedFeatures.size, targetFrames)
     }
 
     /**
@@ -75,6 +77,14 @@ class TemplateRecorder {
      * This indicates the user stood still during recording.
      */
     class InsufficientMotionException(message: String) : Exception(message)
+
+    // Quality score from last recording (0~100)
+    var lastQualityScore: Float = 0f
+        private set
+
+    // Auto-segmentation result (start, end) from last stopAndBuildTemplate
+    private var autoSegmentStart: Int = 0
+    private var autoSegmentEnd: Int = 0
 
     /**
      * Stop recording and build the template feature vector (as ByteArray).
@@ -92,19 +102,31 @@ class TemplateRecorder {
 
         // Extract the best segment (highest motion) to remove "dead frames"
         val (bestStart, windowSize) = extractBestSegmentIndices(collectedFeatures)
+        autoSegmentStart = bestStart
+        autoSegmentEnd = bestStart + windowSize
         val bestFeatures = collectedFeatures.subList(bestStart, bestStart + windowSize)
 
+        // Smooth features for longer templates to reduce MediaPipe jitter.
+        // Fast actions (< 25 frames) skip smoothing to preserve sharp motion details.
+        val smoothedFeatures = if (bestFeatures.size >= 25) {
+            smoothFeatures(bestFeatures, windowSize = 3)
+        } else {
+            bestFeatures
+        }
+
         // Check template quality: motion score
-        val motionScore = computeMotionScore(bestFeatures)
+        val motionScore = computeMotionScore(smoothedFeatures)
+        // Compute quality score: 0~100 based on motion magnitude
+        lastQualityScore = (motionScore / 0.15f * 100f).coerceIn(0f, 100f)
         val MIN_MOTION = 0.05f
         if (motionScore < MIN_MOTION) {
             throw InsufficientMotionException(
-                "动作幅度太小（${String.format("%.3f", motionScore)}），请重新录制，确保做完整的动作"
+                "动作幅度太小（评分：${String.format("%.0f", lastQualityScore)}分），请重新录制，确保做完整的动作"
             )
         }
 
-        // Encode the best segment as ByteArray
-        val featureBytes = encodeFeatureSequence(bestFeatures)
+        // Encode the smoothed segment as ByteArray
+        val featureBytes = encodeFeatureSequence(smoothedFeatures)
 
         // Encode the raw keypoints for preview animation
         val bestKeypoints = collectedRawKeypoints.subList(bestStart, bestStart + windowSize)
@@ -130,32 +152,136 @@ class TemplateRecorder {
     }
 
     /**
-     * Extract the best segment (highest motion) from the recorded frames.
-     * Returns Pair(startIndex, windowSize) for both features and raw keypoints.
+     * Extract the best segment by finding a single complete action around the motion peak.
+     * Instead of searching all window sizes, this finds the highest-motion peak and expands
+     * outward until motion drops below a threshold, capturing one full action cycle.
+     * This avoids including multiple actions (e.g. 3 claps in 3 seconds) in the template.
      */
     private fun extractBestSegmentIndices(features: List<FloatArray>): Pair<Int, Int> {
-        if (features.size < 10) return Pair(0, features.size)
+        if (features.size < 15) return Pair(0, features.size)
 
         val totalFrames = features.size
-        // Window size: 70% of total frames, at least 10 frames
-        val windowSize = kotlin.math.max(10, (totalFrames * 0.7).toInt())
 
-        if (windowSize >= totalFrames) return Pair(0, totalFrames)
+        // Compute frame-to-frame motion for each frame (frame[0] has motion 0)
+        val motions = FloatArray(totalFrames) { i ->
+            if (i == 0) 0f else computeFrameMotion(features[i - 1], features[i])
+        }
 
-        var bestScore = -1f
-        var bestStart = 0
-
-        // Sliding window: find the segment with highest motion score
-        for (i in 0..totalFrames - windowSize) {
-            val segment = features.subList(i, i + windowSize)
-            val score = computeMotionScore(segment)
-            if (score > bestScore) {
-                bestScore = score
-                bestStart = i
+        // Find all local maxima (peaks) and select the best one
+        // Exclude peaks near edges (first/last 20%) to avoid incomplete actions
+        val edgeMargin = totalFrames / 5  // 20% margin on each side
+        val peaks = mutableListOf<Int>()
+        for (i in 1 until totalFrames - 1) {
+            if (motions[i] > motions[i - 1] && motions[i] > motions[i + 1]) {
+                peaks.add(i)
             }
         }
 
-        return Pair(bestStart, windowSize)
+        var peakIndex: Int
+        var peakMotion: Float
+        if (peaks.isNotEmpty()) {
+            // Prefer peaks away from edges for complete actions
+            val validPeaks = peaks.filter { it >= edgeMargin && it <= totalFrames - edgeMargin }
+            val selectedPeaks = if (validPeaks.isNotEmpty()) validPeaks else peaks
+            peakIndex = selectedPeaks.maxByOrNull { motions[it] } ?: selectedPeaks.first()
+            peakMotion = motions[peakIndex]
+        } else {
+            // No clear peaks, fall back to global maximum
+            peakIndex = 0
+            peakMotion = -1f
+            for (i in 1 until totalFrames) {
+                if (motions[i] > peakMotion) {
+                    peakMotion = motions[i]
+                    peakIndex = i
+                }
+            }
+        }
+
+        // Determine action type and dynamic parameters based on peak motion
+        // Fast action (clap): peakMotion > 1.0, narrow peak → high threshold, short minLength
+        // Slow action (squat): peakMotion < 0.3, wide peak → low threshold, long minLength, allow crossing valleys
+        val isFastAction = peakMotion > 1.0f
+        val isSlowAction = peakMotion < 0.3f
+
+        // Dynamic threshold and bounds
+        val (threshold, minLength, maxLength) = when {
+            isFastAction -> Triple(peakMotion * 0.3f, 8, 20)
+            isSlowAction -> Triple(kotlin.math.max(peakMotion * 0.05f, 0.01f), 25, 60)
+            else -> Triple(peakMotion * 0.15f, 15, 45)
+        }
+
+        var start = peakIndex
+        var end = peakIndex
+
+        // Expand from peak with motion threshold
+        // For slow actions, allow crossing small valleys (up to 5 frames below threshold)
+        if (isSlowAction) {
+            // Expand backward, allowing up to 5 frames below threshold
+            var gapCount = 0
+            for (i in peakIndex - 1 downTo 1) {
+                if (motions[i] < threshold) {
+                    gapCount++
+                    if (gapCount > 5) break
+                } else {
+                    gapCount = 0
+                    start = i
+                }
+            }
+
+            // Expand forward, allowing up to 5 frames below threshold
+            gapCount = 0
+            for (i in peakIndex + 1 until totalFrames) {
+                if (motions[i] < threshold) {
+                    gapCount++
+                    if (gapCount > 5) break
+                } else {
+                    gapCount = 0
+                    end = i
+                }
+            }
+        } else {
+            // Original expand logic for fast/medium actions
+            for (i in peakIndex - 1 downTo 1) {
+                if (motions[i] < threshold) break
+                start = i
+            }
+            for (i in peakIndex + 1 until totalFrames) {
+                if (motions[i] < threshold) break
+                end = i
+            }
+        }
+
+        // Add padding (2 frames before and after) for smoother detection matching
+        start = kotlin.math.max(0, start - 2)
+        end = kotlin.math.min(totalFrames - 1, end + 2)
+
+        var length = end - start + 1
+
+        // Extend if too short
+        if (length < minLength) {
+            val needed = minLength - length
+            end = kotlin.math.min(totalFrames - 1, end + needed)
+            length = end - start + 1
+            if (length < minLength) {
+                start = kotlin.math.max(0, start - (minLength - length))
+                length = end - start + 1
+            }
+        }
+
+        // Shrink if too long (trim equally from both sides, keeping peak centered)
+        if (length > maxLength) {
+            val excess = length - maxLength
+            val trimStart = excess / 2
+            val trimEnd = excess - trimStart
+            start += trimStart
+            end -= trimEnd
+            length = end - start + 1
+        }
+
+        android.util.Log.d("TemplateRecorder",
+            "Extracted best segment: start=$start, length=$length, peakMotion=${String.format("%.4f", peakMotion)}, totalFrames=$totalFrames")
+
+        return Pair(start, length)
     }
 
     /**
@@ -185,6 +311,118 @@ class TemplateRecorder {
         }
 
         return totalDist / frameCount
+    }
+
+    /**
+     * Smooth feature sequence using sliding average to reduce MediaPipe detection jitter.
+     * Each dimension is smoothed independently with a symmetric window.
+     * Edge frames use reduced window (replicate padding).
+     * @param windowSize must be odd (3, 5, 7...)
+     */
+    private fun smoothFeatures(features: List<FloatArray>, windowSize: Int = 3): List<FloatArray> {
+        if (features.size < windowSize || windowSize < 2) return features
+
+        val halfWindow = windowSize / 2
+        val featureDim = features[0].size
+        val result = mutableListOf<FloatArray>()
+
+        for (i in features.indices) {
+            val smoothed = FloatArray(featureDim)
+            for (d in 0 until featureDim) {
+                var sum = 0f
+                var count = 0
+                for (j in -halfWindow..halfWindow) {
+                    val idx = i + j
+                    if (idx in features.indices) {
+                        sum += features[idx][d]
+                        count++
+                    }
+                }
+                smoothed[d] = sum / count
+            }
+            result.add(smoothed)
+        }
+
+        return result
+    }
+
+    // ---- Public API for re-segmentation and preview ----
+
+    /** Return the total number of collected frames. */
+    fun getTotalFrames(): Int = collectedFeatures.size
+
+    /** Return the auto-segmented range from the last stopAndBuildTemplate call. */
+    fun getAutoSegmentRange(): Pair<Int, Int> = Pair(autoSegmentStart, autoSegmentEnd)
+
+    /** Return all collected raw keypoints (for preview animation). */
+    fun getCollectedRawKeypoints(): List<Array<FloatArray>> = collectedRawKeypoints.toList()
+
+    /** Return all collected features (for re-segmentation). */
+    fun getCollectedFeatures(): List<FloatArray> = collectedFeatures.toList()
+
+    /**
+     * Compute quality score for a given segment range.
+     * Returns 0~100.
+     */
+    fun computeScoreForSegment(start: Int, end: Int): Float {
+        if (start < 0 || end > collectedFeatures.size || start >= end) return 0f
+        val segment = collectedFeatures.subList(start, end)
+        if (segment.size < 2) return 0f
+        val motionScore = computeMotionScore(segment)
+        return (motionScore / 0.15f * 100f).coerceIn(0f, 100f)
+    }
+
+    /**
+     * Build a template from a custom segment range.
+     * This allows the user to adjust the segment after recording.
+     */
+    fun buildTemplateWithSegment(
+        name: String,
+        start: Int,
+        end: Int,
+        userId: Long? = null,
+        threshold: Float = 0.7f
+    ): Template? {
+        if (start < 0 || end > collectedFeatures.size || start >= end) return null
+
+        val segmentFeatures = collectedFeatures.subList(start, end)
+
+        // Smooth features for longer templates
+        val smoothedFeatures = if (segmentFeatures.size >= 25) {
+            smoothFeatures(segmentFeatures, windowSize = 3)
+        } else {
+            segmentFeatures
+        }
+
+        // Check template quality
+        val motionScore = computeMotionScore(smoothedFeatures)
+        lastQualityScore = (motionScore / 0.15f * 100f).coerceIn(0f, 100f)
+
+        // Encode feature vector
+        val featureBytes = encodeFeatureSequence(smoothedFeatures)
+
+        // Encode keypoint sequence
+        val segmentKeypoints = collectedRawKeypoints.subList(start, end)
+        val keypointBytes = encodeKeypointSequence(segmentKeypoints)
+
+        // Determine pose type
+        val detectedPoseType = if (collectedPoseTypes.isNotEmpty()) {
+            val segmentPoseTypes = collectedPoseTypes.subList(start, end)
+            segmentPoseTypes.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key ?: PoseType.UNKNOWN
+        } else {
+            PoseType.UNKNOWN
+        }
+
+        return Template(
+            userId = userId,
+            name = name,
+            type = TemplateType.CUSTOM,
+            sensorType = SensorType.VISION,
+            featureVector = featureBytes,
+            keypointSequence = keypointBytes,
+            threshold = threshold,
+            poseType = detectedPoseType
+        )
     }
 
     fun cancelRecording() {
@@ -219,17 +457,17 @@ class TemplateRecorder {
         val leftKnee = keypoints[13]
         val rightKnee = keypoints[14]
 
-        val required = arrayOf(leftShoulder, rightShoulder, leftElbow, rightElbow, leftHip, rightHip, leftKnee, rightKnee)
+        // Check all required keypoints including wrist and ankle for consistent feature extraction
+        val leftAnkle = if (keypoints.size > 15) keypoints[15] else return null
+        val rightAnkle = if (keypoints.size > 16) keypoints[16] else return null
+        val leftWrist = if (keypoints.size > 9) keypoints[9] else return null
+        val rightWrist = if (keypoints.size > 10) keypoints[10] else return null
+
+        val required = arrayOf(leftShoulder, rightShoulder, leftElbow, rightElbow, leftHip, rightHip, leftKnee, rightKnee, leftAnkle, rightAnkle, leftWrist, rightWrist)
         if (required.any { it.size < 3 || it[2] < minConfidence }) {
             android.util.Log.w("TemplateRecorder", "Some keypoints below confidence threshold, skipping frame")
             return null
         }
-
-        // Use ankles/wrists if visible, otherwise fallback to knees/elbows for angle calculation
-        val leftAnkle = if (keypoints.size > 15 && keypoints[15].size >= 3 && keypoints[15][2] >= minConfidence) keypoints[15] else leftKnee
-        val rightAnkle = if (keypoints.size > 16 && keypoints[16].size >= 3 && keypoints[16][2] >= minConfidence) keypoints[16] else rightKnee
-        val leftWrist = if (keypoints.size > 9 && keypoints[9].size >= 3 && keypoints[9][2] >= minConfidence) keypoints[9] else leftElbow
-        val rightWrist = if (keypoints.size > 10 && keypoints[10].size >= 3 && keypoints[10][2] >= minConfidence) keypoints[10] else rightElbow
 
         val leftElbowAngle = calculateAngle(leftShoulder, leftElbow, leftWrist)
         val rightElbowAngle = calculateAngle(rightShoulder, rightElbow, rightWrist)
@@ -253,6 +491,19 @@ class TemplateRecorder {
         // Feature 11: ankleY - average ankle vertical position
         val ankleY = (leftAnkle[1] + rightAnkle[1]) / 2f
 
+        // Feature 12: hand distance ratio - distinguishes clapping (hands together) from waving (hands apart)
+        // Uses index finger tips (keypoints[3] and keypoints[4]) for best hand contact detection
+        val leftIndexX = keypoints[3][0]
+        val leftIndexY = keypoints[3][1]
+        val rightIndexX = keypoints[4][0]
+        val rightIndexY = keypoints[4][1]
+        val handDistance = kotlin.math.sqrt(
+            (leftIndexX - rightIndexX) * (leftIndexX - rightIndexX) +
+            (leftIndexY - rightIndexY) * (leftIndexY - rightIndexY)
+        )
+        val shoulderWidth = kotlin.math.abs(leftShoulder[0] - rightShoulder[0])
+        val handDistanceRatio = handDistance / (shoulderWidth + 1e-6f)
+
         return floatArrayOf(
             leftElbowAngle / 180f,
             rightElbowAngle / 180f,
@@ -265,7 +516,8 @@ class TemplateRecorder {
             hipCenterY,            // 9th dim: hip center vertical position [0,1]
             kneeAngleSum,          // 10th dim: knee angle sum [0,1], smaller when deeper squat
             bodyHeight,            // 11th dim: body height (shoulder to ankle)
-            ankleY                 // 12th dim: average ankle Y position
+            ankleY,                // 12th dim: average ankle Y position
+            handDistanceRatio      // 13th dim: hand distance / shoulder width (0=clapping, 1=waving)
         )
     }
 
