@@ -13,7 +13,6 @@ interface DetectionEngine {
     fun pause()
     fun resume()
     fun stop()
-    fun setThreshold(threshold: Float)
     fun isRunning(): Boolean
     val countEvents: Flow<CountEvent>
     /** Notify the engine about current camera configuration */
@@ -27,7 +26,6 @@ interface DetectionEngineFactory {
 data class DetectionConfig(
     val sensorType: SensorType,
     val templateId: Long? = null,
-    val threshold: Float = 0.7f,
     val mode: SessionMode = SessionMode.COUNTING,
     val targetSeconds: Int? = null,
     val targetResolution: android.util.Size = android.util.Size(640, 360),

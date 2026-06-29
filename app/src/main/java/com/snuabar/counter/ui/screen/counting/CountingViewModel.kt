@@ -347,7 +347,6 @@ class CountingViewModel @Inject constructor(
     private var realtimeSaveJob: Job? = null
 
     // Cached detection preferences
-    private var cachedThreshold: Float = 0.7f
     private var cachedPoseModelConfig: PoseModelConfig = PoseModelConfig.STANDARD
 
     init {
@@ -371,12 +370,7 @@ class CountingViewModel @Inject constructor(
             }
         }
 
-        // Cache threshold and pose model config from preferences
-        viewModelScope.launch {
-            detectionPreferences.thresholdFlow.collect { value ->
-                cachedThreshold = value
-            }
-        }
+        // Cache pose model config from preferences
         viewModelScope.launch {
             detectionPreferences.poseModelConfigFlow.collect { value ->
                 val changed = cachedPoseModelConfig != value
@@ -418,7 +412,6 @@ class CountingViewModel @Inject constructor(
             val config = DetectionConfig(
                 sensorType = SensorType.VISION,
                 poseModelConfig = cachedPoseModelConfig,
-                threshold = cachedThreshold,
                 actionType = _actionType.value
             )
             engine.startPreview(config)
@@ -467,7 +460,6 @@ class CountingViewModel @Inject constructor(
         val config = DetectionConfig(
             sensorType = SensorType.VISION,
             poseModelConfig = cachedPoseModelConfig,
-            threshold = cachedThreshold,
             actionType = _actionType.value
         )
         engine.startPreview(config)
@@ -614,7 +606,6 @@ class CountingViewModel @Inject constructor(
             currentEngine?.start(
                 DetectionConfig(
                     sensorType = actualSensorType,
-                    threshold = cachedThreshold,
                     mode = actualMode,
                     targetSeconds = actualTargetSeconds,
                     targetResolution = targetResolution,

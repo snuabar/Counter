@@ -31,9 +31,6 @@ class SettingsViewModel @Inject constructor(
     private val _currentUser = MutableStateFlow<User?>(null)
     val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
 
-    private val _threshold = MutableStateFlow(0.7f)
-    val threshold: StateFlow<Float> = _threshold.asStateFlow()
-
     private val _poseModelConfig = MutableStateFlow(PoseModelConfig.STANDARD)
     val poseModelConfig: StateFlow<PoseModelConfig> = _poseModelConfig.asStateFlow()
 
@@ -82,11 +79,6 @@ class SettingsViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            detectionPreferences.thresholdFlow.collect { value ->
-                _threshold.value = value
-            }
-        }
-        viewModelScope.launch {
             detectionPreferences.poseModelConfigFlow.collect { config ->
                 _poseModelConfig.value = config
             }
@@ -116,12 +108,6 @@ class SettingsViewModel @Inject constructor(
             detectionPreferences.gpuAccelerationFlow.collect { enabled ->
                 _gpuAcceleration.value = enabled
             }
-        }
-    }
-
-    fun setThreshold(value: Float) {
-        viewModelScope.launch {
-            detectionPreferences.setThreshold(value)
         }
     }
 

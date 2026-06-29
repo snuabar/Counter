@@ -72,7 +72,8 @@ fun SkeletonAnimationPreview(
         val minConfidence = 0.3f
 
         // COCO skeleton connections grouped by body part
-        val armConnections = listOf(5 to 7, 7 to 9, 6 to 8, 8 to 10)
+        // Arms: shoulder→elbow→wrist→index_finger (wrist to index is new)
+        val armConnections = listOf(5 to 7, 7 to 9, 9 to 3, 6 to 8, 8 to 10, 10 to 4)
         val legConnections = listOf(11 to 13, 13 to 15, 12 to 14, 14 to 16)
 
         // Scale keypoints to canvas size (normalize to [0,1] first)

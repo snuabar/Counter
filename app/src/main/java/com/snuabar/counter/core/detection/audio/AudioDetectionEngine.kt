@@ -54,7 +54,6 @@ class AudioDetectionEngine @Inject constructor(
         if (isRunning) return
         isRunning = true
         isPaused = false
-        threshold = config.threshold
         count = 0
         startRecording()
     }
@@ -239,9 +238,5 @@ class AudioDetectionEngine @Inject constructor(
         audioRecord?.stop()
         audioRecord?.release()
         audioRecord = null
-    }
-
-    override fun setThreshold(newThreshold: Float) {
-        threshold = newThreshold
     }
 }

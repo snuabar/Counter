@@ -416,7 +416,6 @@ class TemplateViewModel @Inject constructor(
             engine.setCameraInfo(_isFrontCamera.value)
             engine.startPreview(DetectionConfig(
                 sensorType = SensorType.VISION,
-                threshold = 0.7f,
                 mode = SessionMode.COUNTING,
                 poseModelConfig = cachedPoseModelConfig
             ))
@@ -443,7 +442,8 @@ class TemplateViewModel @Inject constructor(
         _isRecording.value = true
         _isRecordingComplete.value = false
         _recordProgress.value = 0
-        _recordTargetFrames.value = durationSeconds * 10
+        val initialFps = if (_fps.value > 0) _fps.value else 30
+        _recordTargetFrames.value = durationSeconds * initialFps
 
         // Start 5-second countdown before actual recording
         _isCountingDown.value = true
@@ -460,11 +460,15 @@ class TemplateViewModel @Inject constructor(
             // Now start actual recording
             val recorder = TemplateRecorder()
             recorder.onProgressUpdate = { current, target ->
+                android.util.Log.d("TemplateViewModel", "Progress: $current / $target")
                 _recordProgress.value = current
                 _recordTargetFrames.value = target
                 _isRecordingComplete.value = (current >= target)
             }
-            recorder.startRecording(durationSeconds)
+            // Use actual camera FPS if available, otherwise default to 30
+            val actualFps = if (_fps.value > 0) _fps.value else 30
+            android.util.Log.d("TemplateViewModel", "Starting recording with actualFps=$actualFps, durationSeconds=$durationSeconds")
+            recorder.startRecording(durationSeconds, actualFps)
             templateRecorder = recorder
         }
     }

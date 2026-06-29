@@ -40,36 +40,57 @@ class CustomPoseActionDetector(
 
     // Template feature sequence (decoded from bytes)
     private val templateFeatures: List<FloatArray> = decodeFeatureSequence(template.featureVector)
-    private val matchThreshold: Float = template.threshold
+    // Fixed threshold for all templates
+    private val matchThreshold: Float = 0.65f
 
     // Window size matches template length for DTW comparison
     private val windowSize = templateFeatures.size.coerceIn(8, 60)
+
+    // Cooldown frames to prevent double-counting
+    // Computed adaptively based on template periodicity in init
+    private var customCooldownFrames = 20
+    private var lastSimilarity: Float = 0f
+
+    // Rising-edge detection: only trigger when similarity crosses threshold from below
+    private var prevSimilarity: Float = 0f
+    private var wasDetected: Boolean = false
+
+    // Peak tracking: reset wasDetected when similarity drops 30% from peak after detection
+    private var peakSimilarity: Float = 0f
+
+    // Lock: after triggering, must wait for similarity to drop below threshold before re-triggering.
+    // This prevents duplicate counts during the same slow motion (long similarity plateau).
+    private var isLocked: Boolean = false
+
+    // Minimum movement threshold
+    private val MIN_MOVEMENT_THRESHOLD = 0.01f
+
+    // Dominant feature: the dimension with the largest variance in the template.
+    private val dominantFeature: Int = computeDominantFeature(templateFeatures)
+
+    // Dominant body part
+    private val templateDominantPart: BodyPart = computeDominantBodyPart(templateFeatures)
+
+    // Template feature ranges for amplitude consistency check
+    private var templateRanges: FloatArray = FloatArray(0)
+    private var top3Dims: IntArray = IntArray(0)
 
     init {
         android.util.Log.d("CustomPoseActionDetector", "Loaded template: name=${template.name}, featureVectorSize=${template.featureVector?.size ?: 0}, decodedFrames=${templateFeatures.size}, windowSize=$windowSize")
         if (templateFeatures.isEmpty()) {
             android.util.Log.e("CustomPoseActionDetector", "WARNING: Template has no feature vectors! featureVector=${template.featureVector?.size ?: 0} bytes")
         }
+
+        // Compute template feature ranges for amplitude consistency check
+        templateRanges = computeFeatureRanges(templateFeatures)
+        top3Dims = findTopNDims(templateRanges, n = 3)
+
+        // Compute adaptive cooldown based on template periodicity
+        // Fast actions (clapping): fewer frames per period → shorter cooldown
+        // Slow actions (squat): more frames per period → longer cooldown
+        customCooldownFrames = computeAdaptiveCooldown(templateFeatures)
+        android.util.Log.d("CustomPoseActionDetector", "Template ranges: ${templateRanges.joinToString { String.format("%.3f", it) }}, top3Dims=${top3Dims.contentToString()}, adaptiveCooldown=$customCooldownFrames")
     }
-
-    // Cooldown frames to prevent double-counting
-    // Increased from 15 to 25 to prevent double-counting during slow movements
-    private val customCooldownFrames = 25
-    private var lastSimilarity: Float = 0f
-
-    // Minimum movement threshold: if feature window variance is below this,
-    // the person is considered stationary and no counting occurs.
-    // This is the average distance from each frame to the window mean.
-    // Standing still with jitter: ~0.03-0.05; Actual movement: ~0.15+
-    private val MIN_MOVEMENT_THRESHOLD = 0.08f
-
-    // Dominant feature: the dimension with the largest variance in the template.
-    // This is used for periodicity detection.
-    private val dominantFeature: Int = computeDominantFeature(templateFeatures)
-
-    // Dominant body part: which body part moves the most in the template.
-    // This helps distinguish leg-dominant (squat) from arm-dominant (pull-up) actions.
-    private val templateDominantPart: BodyPart = computeDominantBodyPart(templateFeatures)
 
     // Minimum periodicity score: the dominant feature must show clear up-down pattern
     // Need at least 1 extrema out of 4 max for clear periodicity
@@ -78,6 +99,9 @@ class CustomPoseActionDetector(
     override fun reset() {
         super.reset()
         featureWindow.clear()
+        prevSimilarity = 0f
+        wasDetected = false
+        isLocked = false
     }
 
     override fun detect(keypoints: Array<FloatArray>): PoseActionResult? {
@@ -139,6 +163,8 @@ class CustomPoseActionDetector(
         val movementScore = computeMovementScore(featureWindow)
         if (movementScore < MIN_MOVEMENT_THRESHOLD) {
             android.util.Log.d("CustomPoseActionDetector", "Movement too low (score=$movementScore), skipping")
+            // Reset detection state when user is stationary to allow re-triggering on next action
+            wasDetected = false
             return PoseActionResult(
                 actionType = ActionType.CUSTOM,
                 isDetected = false,
@@ -153,40 +179,22 @@ class CustomPoseActionDetector(
             )
         }
 
-        // Check dominant body part: the window must have the same dominant part as the template.
-        // This prevents leg-dominant actions (squat) from matching arm-dominant actions (pull-up).
+        // Check body part compatibility to prevent mismatched actions (e.g., squat template matched by arm waving)
+        // Only block clear opposites: LEGS vs ARMS. Allow MIXED/UNKNOWN to pass.
         val windowList = featureWindow.toList()
         val currentDominantPart = computeDominantBodyPart(windowList)
-        if (!isBodyPartCompatible(templateDominantPart, currentDominantPart)) {
-            android.util.Log.d("CustomPoseActionDetector", "Body part mismatch: template=$templateDominantPart, current=$currentDominantPart, skipping")
+        if (isBodyPartOpposite(templateDominantPart, currentDominantPart)) {
+            android.util.Log.d("CustomPoseActionDetector", "Body part opposite: template=$templateDominantPart, current=$currentDominantPart, skipping")
             return PoseActionResult(
                 actionType = ActionType.CUSTOM,
                 isDetected = false,
                 currentState = ActionState.IDLE,
                 count = count,
                 confidence = 0f,
-                debugInfo = "Body part mismatch: expected $templateDominantPart, got $currentDominantPart",
+                debugInfo = "Body part opposite: expected $templateDominantPart, got $currentDominantPart",
                 structuredDebugInfo = DetectionDebugInfo(
                     state = ActionState.IDLE, confidence = 0f,
-                    message = "Body part mismatch: expected $templateDominantPart, got $currentDominantPart"
-                )
-            )
-        }
-
-        // Check periodicity: the dominant feature must show clear up-down pattern
-        val periodicityScore = computePeriodicityScore(featureWindow, dominantFeature)
-        if (periodicityScore < MIN_PERIODICITY_SCORE) {
-            android.util.Log.d("CustomPoseActionDetector", "Periodicity too low (score=$periodicityScore), skipping")
-            return PoseActionResult(
-                actionType = ActionType.CUSTOM,
-                isDetected = false,
-                currentState = ActionState.IDLE,
-                count = count,
-                confidence = 0f,
-                debugInfo = "No periodicity (score=${String.format(Locale.getDefault(), "%.3f", periodicityScore)})",
-                structuredDebugInfo = DetectionDebugInfo(
-                    state = ActionState.IDLE, confidence = 0f,
-                    message = "No periodicity (score=${String.format(Locale.getDefault(), "%.3f", periodicityScore)})"
+                    message = "Body part opposite: expected $templateDominantPart, got $currentDominantPart"
                 )
             )
         }
@@ -194,97 +202,77 @@ class CustomPoseActionDetector(
         // Compare sliding window with template using DTW
         val dtwDistance = computeDTW(windowList, templateFeatures)
 
-        // Compute template internal average frame distance for normalization
-        val templateInternalDist = computeTemplateInternalDistance(templateFeatures)
-        val windowInternalDist = computeTemplateInternalDistance(windowList)
-
-        // Check if window has similar movement magnitude as template
-        val movementRatio = windowInternalDist / (templateInternalDist + 1e-6f)
-        if (movementRatio < 0.3f) {
-            android.util.Log.d("CustomPoseActionDetector", "Movement ratio too low: movementRatio=$movementRatio, skipping")
-            return PoseActionResult(
-                actionType = ActionType.CUSTOM,
-                isDetected = false,
-                currentState = ActionState.IDLE,
-                count = count,
-                confidence = 0f,
-                debugInfo = "Movement too small (ratio=${String.format(Locale.getDefault(), "%.3f", movementRatio)})",
-                structuredDebugInfo = DetectionDebugInfo(
-                    state = ActionState.IDLE, confidence = 0f,
-                    message = "Movement too small (ratio=${String.format(Locale.getDefault(), "%.3f", movementRatio)})"
-                )
-            )
-        }
-
-        // Check hipCenterY range: for leg-dominant actions, significant hip movement is required.
-        // For arm-dominant actions (e.g., clapping), hipCenterY may not change much, so skip this check.
-        val templateHipYRange = templateFeatures.map { it[8] }.let { it.maxOrNull()!! - it.minOrNull()!! }
-        val windowHipYRange = windowList.map { it[8] }.let { it.maxOrNull()!! - it.minOrNull()!! }
-        val hipYRangeRatio = windowHipYRange / (templateHipYRange + 1e-6f)
-        // Skip hipYRange check for arm-dominant actions (e.g., clapping, pull-ups)
-        if (templateDominantPart != BodyPart.ARMS && hipYRangeRatio < 0.4f) {
-            android.util.Log.d("CustomPoseActionDetector", "Hip Y range too small: hipYRangeRatio=$hipYRangeRatio, templateHipYRange=$templateHipYRange, windowHipYRange=$windowHipYRange, skipping")
-            return PoseActionResult(
-                actionType = ActionType.CUSTOM,
-                isDetected = false,
-                currentState = ActionState.IDLE,
-                count = count,
-                confidence = 0f,
-                debugInfo = "Hip Y range too small (ratio=${String.format(Locale.getDefault(), "%.3f", hipYRangeRatio)})",
-                structuredDebugInfo = DetectionDebugInfo(
-                    state = ActionState.IDLE, confidence = 0f,
-                    message = "Hip Y range too small (ratio=${String.format(Locale.getDefault(), "%.3f", hipYRangeRatio)})"
-                )
-            )
-        }
-
-        // Analyze knee angle range to help distinguish squat from jump
-        // Squat: deep knee bend (large angle variation)
-        // Jump: moderate knee bend, faster movement
-        val templateKneeRange = computeKneeAngleRange(templateFeatures)
-        val windowKneeRange = computeKneeAngleRange(windowList)
-        val kneeRangeRatio = windowKneeRange / (templateKneeRange + 1e-6f)
-        android.util.Log.d("CustomPoseActionDetector", "Knee angle ranges: template=$templateKneeRange, window=$windowKneeRange, ratio=$kneeRangeRatio")
-
-        // Action signature validation (组合策略)
-        // Validate extended features (indices 9-11) to distinguish squat from jump
-        val templateSignature = computeActionSignature(templateFeatures)
-        val windowSignature = computeActionSignature(windowList)
-        val signatureMatch = validateActionSignature(templateSignature, windowSignature)
-        android.util.Log.d("CustomPoseActionDetector", "Action signature match: $signatureMatch, template=$templateSignature, window=$windowSignature")
-
-        // If signature doesn't match well, reduce similarity or reject
-        if (signatureMatch < 0.5f) {
-            android.util.Log.d("CustomPoseActionDetector", "Action signature mismatch: signatureMatch=$signatureMatch, skipping")
-            return PoseActionResult(
-                actionType = ActionType.CUSTOM,
-                isDetected = false,
-                currentState = ActionState.IDLE,
-                count = count,
-                confidence = 0f,
-                debugInfo = "Action signature mismatch (match=${String.format(Locale.getDefault(), "%.3f", signatureMatch)})",
-                structuredDebugInfo = DetectionDebugInfo(
-                    state = ActionState.IDLE, confidence = 0f,
-                    message = "Action signature mismatch (match=${String.format(Locale.getDefault(), "%.3f", signatureMatch)})"
-                )
-            )
-        }
-
-        // Normalize DTW distance using template internal distance as reference
+        // Normalize DTW distance by path length for fair comparison
         val pathLength = (windowList.size + templateFeatures.size) / 2f
         val avgDtwDist = dtwDistance / pathLength
-        val ratio = avgDtwDist / (templateInternalDist + 1e-6f)
-        val similarity = kotlin.math.exp(-ratio * 0.07f)
+
+        // Direct similarity: no templateInternalDist normalization
+        // This prevents templates with small internal motion from being matched too easily
+        val similarity = kotlin.math.exp(-avgDtwDist * 0.5f)
 
         confidence = similarity
         lastSimilarity = similarity
 
-        android.util.Log.d("CustomPoseActionDetector", "similarity=${String.format(Locale.getDefault(), "%.3f", similarity)}, movementScore=${String.format(Locale.getDefault(), "%.3f", movementScore)}, periodicityScore=${String.format(Locale.getDefault(), "%.3f", periodicityScore)}, movementRatio=${String.format(Locale.getDefault(), "%.3f", movementRatio)}, threshold=$matchThreshold, templateSize=${templateFeatures.size}, windowSize=${windowList.size}")
+        android.util.Log.d("CustomPoseActionDetector", "similarity=${String.format(Locale.getDefault(), "%.3f", similarity)}, movementScore=${String.format(Locale.getDefault(), "%.3f", movementScore)}, threshold=$matchThreshold, templateSize=${templateFeatures.size}, windowSize=${windowList.size}, cooldown=${isInCooldown()}")
 
-        return if (similarity >= matchThreshold && !isInCooldown()) {
+        // Check amplitude consistency: current window must have similar movement magnitude as template
+        // This prevents small movements (e.g., standing sway) from matching large-movement templates
+        val windowRanges = computeFeatureRanges(windowList)
+        var amplitudeMatchScore = 0f
+        var checkedDims = 0
+        for (dim in top3Dims) {
+            if (templateRanges[dim] > 0.01f) { // Only check dimensions with significant change in template
+                val ratio = kotlin.math.min(windowRanges[dim] / templateRanges[dim], 2f) // Cap at 2x to avoid penalizing exaggerated movements
+                amplitudeMatchScore += if (ratio >= 0.6f) 1f else ratio // Partial credit
+                checkedDims++
+            }
+        }
+        val amplitudeRatio = if (checkedDims > 0) amplitudeMatchScore / checkedDims else 1f
+
+        android.util.Log.d("CustomPoseActionDetector", "amplitudeRatio=${String.format(Locale.getDefault(), "%.2f", amplitudeRatio)}, templateRanges=${top3Dims.map { templateRanges[it] }.joinToString { String.format("%.3f", it) }}, windowRanges=${top3Dims.map { windowRanges[it] }.joinToString { String.format("%.3f", it) }}")
+
+        // Peak tracking: track the highest similarity after detection
+        if (wasDetected && similarity > peakSimilarity) {
+            peakSimilarity = similarity
+        }
+
+        // Rising-edge detection: only trigger when similarity crosses threshold from below.
+        // Peak-based hysteresis: after detection, reset when similarity drops 30% from peak.
+        // Lock-based protection: after triggering, must wait for similarity to drop below threshold
+        // before re-triggering. This prevents duplicate counts during the same slow motion.
+        var isDetected = false
+        if (similarity >= matchThreshold && amplitudeRatio >= 0.6f && !wasDetected && !isInCooldown() && !isLocked) {
             count++
             cooldownCounter = customCooldownFrames
             currentState = ActionState.COMPLETED
+            wasDetected = true
+            isLocked = true  // Lock until similarity drops below threshold
+            peakSimilarity = similarity
+            isDetected = true
+            android.util.Log.i("CustomPoseActionDetector", "ACTION DETECTED! count=$count, similarity=$similarity")
+        } else if (wasDetected && peakSimilarity > 0 && similarity < peakSimilarity * 0.7f) {
+            // Similarity dropped 30% from peak → action is over, allow re-triggering
+            wasDetected = false
+            peakSimilarity = 0f
+            currentState = ActionState.IDLE
+        } else if (similarity < matchThreshold * 0.3f) {
+            wasDetected = false
+            peakSimilarity = 0f
+            currentState = if (similarity >= matchThreshold * 0.7f) ActionState.IN_PROGRESS else ActionState.IDLE
+        } else {
+            currentState = if (similarity >= matchThreshold * 0.7f) ActionState.IN_PROGRESS else ActionState.IDLE
+        }
+
+        // Unlock: only when similarity drops below threshold can we re-trigger.
+        // This prevents duplicate counts during long similarity plateaus (slow motions).
+        if (isLocked && similarity < matchThreshold) {
+            isLocked = false
+        }
+
+        // Update prevSimilarity for next frame
+        prevSimilarity = similarity
+
+        return if (isDetected) {
             PoseActionResult(
                 actionType = ActionType.CUSTOM,
                 isDetected = true,
@@ -298,7 +286,6 @@ class CustomPoseActionDetector(
                 )
             )
         } else {
-            currentState = if (similarity >= matchThreshold * 0.7f) ActionState.IN_PROGRESS else ActionState.IDLE
             PoseActionResult(
                 actionType = ActionType.CUSTOM,
                 isDetected = false,
@@ -332,20 +319,24 @@ class CustomPoseActionDetector(
         val leftKnee = keypoints[13]
         val rightKnee = keypoints[14]
 
-        // Check visibility of all required keypoints
-        val required = arrayOf(leftShoulder, rightShoulder, leftElbow, rightElbow, leftHip, rightHip, leftKnee, rightKnee)
+        // Check visibility of all required keypoints including wrist and ankle
+        val leftWrist = keypoints[9]
+        val rightWrist = keypoints[10]
+        val leftAnkle = keypoints[15]
+        val rightAnkle = keypoints[16]
+        val required = arrayOf(leftShoulder, rightShoulder, leftElbow, rightElbow, leftHip, rightHip, leftKnee, rightKnee, leftWrist, rightWrist, leftAnkle, rightAnkle)
         if (required.any { !isVisible(it, minConfidence) }) return null
 
         // Compute joint angles (in degrees, then normalize to [0,1])
         val leftElbowAngle = calculateAngle(
             leftShoulder[0], leftShoulder[1],
             leftElbow[0], leftElbow[1],
-            keypoints[9][0], keypoints[9][1] // left_wrist
+            leftWrist[0], leftWrist[1] // left_wrist
         )
         val rightElbowAngle = calculateAngle(
             rightShoulder[0], rightShoulder[1],
             rightElbow[0], rightElbow[1],
-            keypoints[10][0], keypoints[10][1] // right_wrist
+            rightWrist[0], rightWrist[1] // right_wrist
         )
         val leftShoulderAngle = calculateAngle(
             leftElbow[0], leftElbow[1],
@@ -370,12 +361,12 @@ class CustomPoseActionDetector(
         val leftKneeAngle = calculateAngle(
             leftHip[0], leftHip[1],
             leftKnee[0], leftKnee[1],
-            keypoints[15][0], keypoints[15][1] // left_ankle
+            leftAnkle[0], leftAnkle[1] // left_ankle
         )
         val rightKneeAngle = calculateAngle(
             rightHip[0], rightHip[1],
             rightKnee[0], rightKnee[1],
-            keypoints[16][0], keypoints[16][1] // right_ankle
+            rightAnkle[0], rightAnkle[1] // right_ankle
         )
 
         // Hip center vertical position: helps distinguish squat (hip moves up/down)
@@ -388,11 +379,24 @@ class CustomPoseActionDetector(
         // Feature 10: bodyHeight - vertical distance from shoulder center to ankle center
         // Smaller when squatting (body is lower)
         val shoulderCenterY = (leftShoulder[1] + rightShoulder[1]) / 2f
-        val ankleCenterY = (keypoints[15][1] + keypoints[16][1]) / 2f
+        val ankleCenterY = (leftAnkle[1] + rightAnkle[1]) / 2f
         val bodyHeight = shoulderCenterY - ankleCenterY
         // Feature 11: ankleY - average ankle vertical position
         // Used to detect "jumping off ground" vs "feet on ground"
-        val ankleY = (keypoints[15][1] + keypoints[16][1]) / 2f
+        val ankleY = (leftAnkle[1] + rightAnkle[1]) / 2f
+
+        // Feature 12: hand distance ratio - distinguishes clapping (hands together) from waving (hands apart)
+        // Uses index finger tips (coco17[3] and coco17[4]) for best hand contact detection
+        val leftIndexX = keypoints[3][0]
+        val leftIndexY = keypoints[3][1]
+        val rightIndexX = keypoints[4][0]
+        val rightIndexY = keypoints[4][1]
+        val handDistance = kotlin.math.sqrt(
+            (leftIndexX - rightIndexX) * (leftIndexX - rightIndexX) +
+            (leftIndexY - rightIndexY) * (leftIndexY - rightIndexY)
+        )
+        val shoulderWidth = kotlin.math.abs(leftShoulder[0] - rightShoulder[0])
+        val handDistanceRatio = handDistance / (shoulderWidth + 1e-6f)
 
         // Normalize angles to [0, 1] range (divide by 180)
         return floatArrayOf(
@@ -407,32 +411,40 @@ class CustomPoseActionDetector(
             hipCenterY,            // 9th dim: hip center vertical position [0,1]
             kneeAngleSum,          // 10th dim: knee angle sum [0,1], smaller when deeper squat
             bodyHeight,            // 11th dim: body height (shoulder to ankle)
-            ankleY                 // 12th dim: average ankle Y position
+            ankleY,                // 12th dim: average ankle Y position
+            handDistanceRatio      // 13th dim: hand distance / shoulder width (0=clapping, 1=waving)
         )
     }
 
     /**
-     * Compute movement score: the maximum variance across any single feature dimension.
-     * This ensures that even if only one body part moves (e.g., arms during clapping),
-     * the movement score is still high enough to pass the threshold.
-     *
-     * Standing still with slight jitter: score ~0.03-0.05
-     * Performing a movement: score ~0.15+
+     * Compute movement score: group by body part and use the dominant group's variance.
+     * This prevents arm-dominant actions (clapping) from being filtered out by leg variance.
+     * Also prevents stationary jitter from triggering (all groups have low variance).
      */
     private fun computeMovementScore(window: ArrayDeque<FloatArray>): Float {
         if (window.size < 2) return 0f
         val list = window.toList()
-        val dim = list[0].size
 
-        var maxVariance = 0f
-        for (d in 0 until dim) {
-            val values = list.map { it[d] }
-            val mean = values.sum() / values.size
-            val variance = values.map { (it - mean) * (it - mean) }.sum() / values.size
-            maxVariance = kotlin.math.max(maxVariance, variance)
+        // Group variances by body part
+        // Arms: indices 0-3 (elbow + shoulder angles) + 12 (handDistanceRatio)
+        // Legs: indices 6-7 (knee angles)
+        // Hip: index 8 (hipCenterY)
+        val armVariance = computeGroupVariance(list, listOf(0, 1, 2, 3, 12))
+        val legVariance = computeGroupVariance(list, listOf(6, 7))
+        val hipVariance = computeGroupVariance(list, listOf(8))
+
+        // If arms move significantly more than legs/hip → arm-dominant action
+        // If all parts move similarly and little → stationary jitter
+        return if (armVariance > legVariance * 2f && armVariance > hipVariance * 2f) {
+            // Arm-dominant: use arm variance (higher sensitivity for clapping, etc.)
+            kotlin.math.sqrt(armVariance)
+        } else if (legVariance > armVariance * 2f && legVariance > hipVariance * 2f) {
+            // Leg-dominant: use leg variance
+            kotlin.math.sqrt(legVariance)
+        } else {
+            // Mixed or stationary: use overall max variance (more strict)
+            kotlin.math.sqrt(kotlin.math.max(armVariance, kotlin.math.max(legVariance, hipVariance)))
         }
-
-        return kotlin.math.sqrt(maxVariance)
     }
 
     /**
@@ -445,8 +457,9 @@ class CustomPoseActionDetector(
         val m = b.size
         if (n == 0 || m == 0) return Float.MAX_VALUE
 
-        // Sakoe-Chiba band width: allow warping up to 25% of max sequence length
-        val bandWidth = kotlin.math.max(n, m) / 4
+        // Sakoe-Chiba band width: allow warping up to 50% of max sequence length
+        // Increased from 25% to better handle speed variations in clapping/squatting
+        val bandWidth = kotlin.math.max(n, m) / 2
 
         val dtw = Array(n + 1) { FloatArray(m + 1) { Float.MAX_VALUE } }
         dtw[0][0] = 0f
@@ -466,9 +479,7 @@ class CustomPoseActionDetector(
 
     /**
      * Compute Euclidean distance between two feature vectors.
-     * All dimensions are treated equally to enforce strict template matching.
-     * This ensures that the detected action matches the recorded template exactly,
-     * including hand/arm positions.
+     * All dimensions are treated equally.
      */
     private fun euclideanDistance(a: FloatArray, b: FloatArray): Float {
         var sum = 0f
@@ -656,31 +667,39 @@ class CustomPoseActionDetector(
             result.add(frame)
         }
 
-        // Backward compatibility: if template was recorded with 8 dimensions (old version),
-        // pad with new dimensions (neutral values)
-        if (featureDim == 8) {
-            return result.map { oldFrame ->
-                FloatArray(12) { i ->
+        // Backward compatibility: pad old templates to current 13 dimensions
+        // Current: 13 dims (0-7: angles, 8: hipCenterY, 9: kneeAngleSum, 10: bodyHeight, 11: ankleY, 12: handDistanceRatio)
+        when (featureDim) {
+            8 -> return result.map { oldFrame ->
+                FloatArray(13) { i ->
                     when {
                         i < 8 -> oldFrame[i]
                         i == 8 -> 0f // hipCenterY
                         i == 9 -> oldFrame[6] + oldFrame[7] // kneeAngleSum approximation
                         i == 10 -> 0.5f // bodyHeight neutral
                         i == 11 -> 0.5f // ankleY neutral
+                        i == 12 -> 0.5f // handDistanceRatio neutral
                         else -> 0f
                     }
                 }
             }
-        }
-        // Backward compatibility: if template was recorded with 9 dimensions (previous version)
-        if (featureDim == 9) {
-            return result.map { oldFrame ->
-                FloatArray(12) { i ->
+            9 -> return result.map { oldFrame ->
+                FloatArray(13) { i ->
                     when {
                         i < 9 -> oldFrame[i]
                         i == 9 -> oldFrame[6] + oldFrame[7] // kneeAngleSum approximation
                         i == 10 -> 0.5f // bodyHeight neutral
                         i == 11 -> 0.5f // ankleY neutral
+                        i == 12 -> 0.5f // handDistanceRatio neutral
+                        else -> 0f
+                    }
+                }
+            }
+            12 -> return result.map { oldFrame ->
+                FloatArray(13) { i ->
+                    when {
+                        i < 12 -> oldFrame[i]
+                        i == 12 -> 0.5f // handDistanceRatio neutral (not available in old templates)
                         else -> 0f
                     }
                 }
@@ -703,7 +722,7 @@ class CustomPoseActionDetector(
      * This helps distinguish leg-dominant (squat) from arm-dominant (pull-up) actions.
      *
      * Feature indices:
-     * - Arms: 0-3 (elbow + shoulder angles)
+     * - Arms: 0-3 (elbow + shoulder angles) + 12 (handDistanceRatio)
      * - Legs: 6-7 (knee angles)
      * - Hip: 8 (hipCenterY)
      */
@@ -757,6 +776,82 @@ class CustomPoseActionDetector(
         if (templatePart == BodyPart.UNKNOWN || currentPart == BodyPart.UNKNOWN) return true
         if (templatePart == BodyPart.MIXED || currentPart == BodyPart.MIXED) return true
         return templatePart == currentPart
+    }
+
+    /**
+     * Check if two body parts are clear opposites (should block).
+     * Only blocks LEGS vs ARMS to prevent squat template being matched by arm waving.
+     * HIP is not blocked as it's less common to confuse.
+     */
+    private fun isBodyPartOpposite(templatePart: BodyPart, currentPart: BodyPart): Boolean {
+        // Only block clear opposites
+        return (templatePart == BodyPart.LEGS && currentPart == BodyPart.ARMS) ||
+               (templatePart == BodyPart.ARMS && currentPart == BodyPart.LEGS)
+    }
+
+    /**
+     * Compute feature ranges (max - min) for each dimension in a feature sequence.
+     */
+    private fun computeFeatureRanges(features: List<FloatArray>): FloatArray {
+        if (features.isEmpty()) return FloatArray(0)
+        val dim = features[0].size
+        return FloatArray(dim) { d ->
+            val values = features.map { it[d] }
+            (values.maxOrNull() ?: 0f) - (values.minOrNull() ?: 0f)
+        }
+    }
+
+    /**
+     * Find top N dimensions with largest ranges.
+     */
+    private fun findTopNDims(ranges: FloatArray, n: Int): IntArray {
+        return ranges.withIndex()
+            .sortedByDescending { it.value }
+            .take(n)
+            .map { it.index }
+            .toIntArray()
+    }
+
+    /**
+     * Compute adaptive cooldown based on template periodicity.
+     * Analyzes the dominant feature dimension to estimate action period,
+     * then sets cooldown to ~70% of one period.
+     * Fast actions (clapping): shorter cooldown; Slow actions (squat): longer cooldown.
+     */
+    private fun computeAdaptiveCooldown(features: List<FloatArray>): Int {
+        if (features.size < 8) return 10 // Fallback for very short templates
+
+        // Find dominant feature (largest variance)
+        val variances = FloatArray(features[0].size) { d ->
+            val values = features.map { it[d] }
+            val mean = values.average().toFloat()
+            values.map { (it - mean) * (it - mean) }.average().toFloat()
+        }
+        val dominantDim = variances.withIndex().maxBy { it.value }.index
+
+        // Count peaks in dominant dimension
+        val values = features.map { it[dominantDim] }
+        var peakCount = 0
+        for (i in 1 until values.size - 1) {
+            if (values[i] > values[i - 1] && values[i] > values[i + 1]) {
+                peakCount++
+            }
+        }
+
+        // If no clear peaks, assume 1 full cycle in template
+        if (peakCount == 0) peakCount = 1
+
+        // Estimate frames per period
+        val framesPerPeriod = features.size.toFloat() / peakCount
+
+        // Cooldown = 50% of period for fast actions, 70% for slower ones.
+        // Lower bound of 5 frames (~0.17s) allows very rapid re-triggering (e.g., fast clapping).
+        val ratio = if (framesPerPeriod < 20) 0.5f else 0.7f
+        val cooldown = kotlin.math.max(5, kotlin.math.min(25, (framesPerPeriod * ratio).toInt()))
+
+        android.util.Log.d("CustomPoseActionDetector", "Adaptive cooldown: dominantDim=$dominantDim, peakCount=$peakCount, framesPerPeriod=${String.format("%.1f", framesPerPeriod)}, ratio=$ratio, cooldown=$cooldown")
+
+        return cooldown
     }
 
     private fun readFloat(bytes: ByteArray, offset: Int): Float {

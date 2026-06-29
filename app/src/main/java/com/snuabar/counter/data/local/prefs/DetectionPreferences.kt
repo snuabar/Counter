@@ -22,21 +22,9 @@ class DetectionPreferences @Inject constructor(
     private val dataStore = context.detectionDataStore
 
     companion object {
-        val THRESHOLD = floatPreferencesKey("threshold")
         val POSE_MODEL_CONFIG = stringPreferencesKey("pose_model_config")
         val VOICE_ANNOUNCEMENT = booleanPreferencesKey("voice_announcement")
         val GPU_ACCELERATION = booleanPreferencesKey("gpu_acceleration")
-    }
-
-    val thresholdFlow: Flow<Float> = dataStore.data
-        .map { preferences ->
-            preferences[THRESHOLD] ?: 0.7f
-        }
-
-    suspend fun setThreshold(value: Float) {
-        dataStore.edit { preferences ->
-            preferences[THRESHOLD] = value.coerceIn(0.1f, 1.0f)
-        }
     }
 
     val poseModelConfigFlow: Flow<PoseModelConfig> = dataStore.data

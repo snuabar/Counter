@@ -148,11 +148,14 @@ fun PoseCameraPreview(
                                 val minConfidence = 0.3f
 
                                 // COCO skeleton connections
+                                // Head: nose(0)-eyes(1,2), arms: shoulder(5,6)-elbow(7,8)-wrist(9,10)-index(3,4)
+                                // Torso: shoulder(5,6)-hip(11,12), Legs: hip(11,12)-knee(13,14)-ankle(15,16)
                                 val connections = listOf(
-                                    0 to 1, 0 to 2, 1 to 3, 2 to 4,
-                                    5 to 6, 5 to 7, 7 to 9, 6 to 8, 8 to 10,
-                                    5 to 11, 6 to 12, 11 to 12,
-                                    11 to 13, 13 to 15, 12 to 14, 14 to 16
+                                    0 to 1, 0 to 2,  // head: nose-eyes
+                                    5 to 6, 5 to 7, 7 to 9, 6 to 8, 8 to 10,  // arms + torso
+                                    9 to 3, 10 to 4,  // wrist to index finger
+                                    5 to 11, 6 to 12, 11 to 12,  // torso
+                                    11 to 13, 13 to 15, 12 to 14, 14 to 16  // legs
                                 )
 
                                 fun toScreen(kp: FloatArray): Offset {

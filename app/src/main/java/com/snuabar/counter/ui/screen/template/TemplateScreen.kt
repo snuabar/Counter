@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -91,6 +92,8 @@ fun TemplateScreen(
     val recordingTemplateName by viewModel.recordingTemplateName.collectAsState()
 
     val isRecordingComplete by viewModel.isRecordingComplete.collectAsState()
+
+    val context = LocalContext.current
 
     // Expanded template ID for swipe-to-delete
     var expandedTemplateId by remember { mutableStateOf<Long?>(null) }
@@ -142,9 +145,11 @@ fun TemplateScreen(
                     isRecordingComplete = isRecordingComplete,
                     onStop = {
                         viewModel.stopRecording(
-                            onSuccess = { /* template saved */ },
+                            onSuccess = {
+                                android.widget.Toast.makeText(context, "录制完成", android.widget.Toast.LENGTH_SHORT).show()
+                            },
                             onFailure = { message ->
-                                /* Show error message in snackbar or toast */
+                                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
                             }
                         )
                     },
@@ -260,10 +265,11 @@ private fun RecordingPanel(
                 )
             } else {
                 if (isRecordingComplete) {
-                    // Recording complete overlay
+                    // Recording complete overlay with semi-transparent background
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.7f))
                             .align(Alignment.Center),
                         contentAlignment = Alignment.Center
                     ) {
