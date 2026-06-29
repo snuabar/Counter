@@ -74,6 +74,35 @@ class TemplateViewModel @Inject constructor(
     private val _recordingTemplateName = MutableStateFlow("")
     val recordingTemplateName: StateFlow<String> = _recordingTemplateName.asStateFlow()
 
+    // Preview mode state (after recording completes, before saving)
+    private val _isPreviewMode = MutableStateFlow(false)
+    val isPreviewMode: StateFlow<Boolean> = _isPreviewMode.asStateFlow()
+
+    // Preview data for re-segmentation
+    private val _previewTemplate = MutableStateFlow<Template?>(null)
+    val previewTemplate: StateFlow<Template?> = _previewTemplate.asStateFlow()
+
+    // Full raw keypoints (for re-segmentation preview)
+    private var fullRawKeypoints: List<Array<FloatArray>>? = null
+
+    // Segment range for preview (frame indices)
+    private val _segmentStart = MutableStateFlow(0)
+    val segmentStart: StateFlow<Int> = _segmentStart.asStateFlow()
+
+    private val _segmentEnd = MutableStateFlow(0)
+    val segmentEnd: StateFlow<Int> = _segmentEnd.asStateFlow()
+
+    // Computed score for current segment (0~100)
+    private val _computedScore = MutableStateFlow(0f)
+    val computedScore: StateFlow<Float> = _computedScore.asStateFlow()
+
+    // Total recorded frames
+    private val _totalRecordedFrames = MutableStateFlow(0)
+    val totalRecordedFrames: StateFlow<Int> = _totalRecordedFrames.asStateFlow()
+
+    private val _previewKeypointSequence = MutableStateFlow<ByteArray?>(null)
+    val previewKeypointSequence: StateFlow<ByteArray?> = _previewKeypointSequence.asStateFlow()
+
     private val _isRecordingComplete = MutableStateFlow(false)
     val isRecordingComplete: StateFlow<Boolean> = _isRecordingComplete.asStateFlow()
 
@@ -393,7 +422,7 @@ class TemplateViewModel @Inject constructor(
     /**
      * Start recording for an existing template (add feature vector).
      */
-    fun startRecordingForTemplate(templateId: Long, templateName: String, durationSeconds: Int = 3) {
+    fun startRecordingForTemplate(templateId: Long, templateName: String, durationSeconds: Int = 10) {
         recordingTemplateId = templateId
         startRecordingInternal(templateName, durationSeconds)
     }
@@ -401,9 +430,9 @@ class TemplateViewModel @Inject constructor(
     /**
      * Start recording a new template.
      * @param templateName name for the template being recorded
-     * @param durationSeconds recording duration (default 3 seconds)
+     * @param durationSeconds recording duration (default 10 seconds)
      */
-    fun startRecording(templateName: String, durationSeconds: Int = 3) {
+    fun startRecording(templateName: String, durationSeconds: Int = 10) {
         recordingTemplateId = null
         startRecordingInternal(templateName, durationSeconds)
     }
@@ -490,7 +519,8 @@ class TemplateViewModel @Inject constructor(
     }
 
     /**
-     * Stop recording and save the template.
+     * Stop recording and enter preview mode.
+     * This builds the initial template and exposes it for user adjustment.
      */
     fun stopRecording(onSuccess: (Template) -> Unit, onFailure: (String) -> Unit) {
         recordingSession.clearCallback()
@@ -502,18 +532,73 @@ class TemplateViewModel @Inject constructor(
             return
         }
         val templateName = _recordingTemplateName.value
-        val existingId = recordingTemplateId
         viewModelScope.launch {
-            val userId = userRepository.currentUserId.first()
             try {
                 val template = recorder.stopAndBuildTemplate(
+                    name = templateName
+                )
+                if (template != null) {
+                    val qualityScore = recorder.lastQualityScore
+                    android.util.Log.d("TemplateViewModel", "Template built: name=$templateName, featureVector=${template.featureVector?.size ?: 0} bytes, frames=${templateRecorder?.recordedFrames ?: 0}, qualityScore=${String.format("%.0f", qualityScore)}")
+                    
+                    // Save preview data
+                    _previewTemplate.value = template
+                    _totalRecordedFrames.value = recorder.getTotalFrames()
+                    fullRawKeypoints = recorder.getCollectedRawKeypoints()
+                    
+                    // Get auto-segment range
+                    val (autoStart, autoEnd) = recorder.getAutoSegmentRange()
+                    _segmentStart.value = autoStart
+                    _segmentEnd.value = autoEnd
+                    _computedScore.value = qualityScore
+                    
+                    // Enter preview mode
+                    _isPreviewMode.value = true
+                    _previewKeypointSequence.value = getPreviewKeypointSequence()
+                    onSuccess(template)
+                } else {
+                    onFailure("录制失败：未收集到足够的帧")
+                }
+            } catch (e: TemplateRecorder.InsufficientMotionException) {
+                onFailure(e.message ?: "动作幅度太小，请重新录制")
+            }
+        }
+    }
+
+    /**
+     * Update the segment range and recompute score.
+     * Called when user drags the range slider.
+     */
+    fun updateSegmentRange(start: Int, end: Int) {
+        val recorder = templateRecorder ?: return
+        _segmentStart.value = start.coerceIn(0, recorder.getTotalFrames())
+        _segmentEnd.value = end.coerceIn(0, recorder.getTotalFrames())
+        val score = recorder.computeScoreForSegment(_segmentStart.value, _segmentEnd.value)
+        _computedScore.value = score
+        _previewKeypointSequence.value = getPreviewKeypointSequence()
+    }
+
+    /**
+     * Save the current preview template to database.
+     */
+    fun savePreviewTemplate(onSuccess: () -> Unit, onFailure: (String) -> Unit) {
+        val recorder = templateRecorder ?: run {
+            onFailure("录制数据已丢失")
+            return
+        }
+        val templateName = _recordingTemplateName.value
+        val existingId = recordingTemplateId
+        viewModelScope.launch {
+            try {
+                val userId = userRepository.currentUserId.first()
+                val template = recorder.buildTemplateWithSegment(
                     name = templateName,
+                    start = _segmentStart.value,
+                    end = _segmentEnd.value,
                     userId = userId
                 )
                 if (template != null) {
-                    android.util.Log.d("TemplateViewModel", "Template built: name=$templateName, featureVector=${template.featureVector?.size ?: 0} bytes, frames=${templateRecorder?.recordedFrames ?: 0}")
                     if (existingId != null) {
-                        // Update existing template with feature vector
                         val existing = templateRepository.getTemplate(existingId)
                         if (existing != null) {
                             val updated = existing.copy(
@@ -521,27 +606,40 @@ class TemplateViewModel @Inject constructor(
                                 keypointSequence = template.keypointSequence
                             )
                             templateRepository.createTemplate(updated)
+                        } else {
+                            // 原模板已不存在，降级为新模板插入
+                            templateRepository.createTemplate(template)
                         }
                     } else {
                         templateRepository.createTemplate(template)
                     }
                     _isRecording.value = false
+                    _isPreviewMode.value = false
+                    _previewTemplate.value = null
                     templateRecorder = null
                     recordingTemplateId = null
-                    onSuccess(template)
+                    onSuccess()
                 } else {
-                    _isRecording.value = false
-                    templateRecorder = null
-                    recordingTemplateId = null
-                    onFailure("录制失败：未收集到足够的帧")
+                    onFailure("保存失败：无法生成模板")
                 }
-            } catch (e: TemplateRecorder.InsufficientMotionException) {
-                _isRecording.value = false
-                templateRecorder = null
-                recordingTemplateId = null
-                onFailure(e.message ?: "动作幅度太小，请重新录制")
+            } catch (e: Exception) {
+                onFailure("保存失败：${e.message}")
             }
         }
+    }
+
+    /**
+     * Get the preview keypoint sequence for the current segment range.
+     * This encodes only the frames within [segmentStart, segmentEnd] for preview.
+     */
+    fun getPreviewKeypointSequence(): ByteArray? {
+        val allKeypoints = fullRawKeypoints ?: return null
+        val start = _segmentStart.value.coerceIn(0, allKeypoints.size)
+        val end = _segmentEnd.value.coerceIn(0, allKeypoints.size)
+        if (start >= end) return null
+        return com.snuabar.counter.core.template.KeypointSequenceCodec.encode(
+            allKeypoints.subList(start, end)
+        )
     }
 
     /**
@@ -557,12 +655,20 @@ class TemplateViewModel @Inject constructor(
         templateRecorder?.cancelRecording()
         templateRecorder = null
         _isRecording.value = false
-        _isCountingDown.value = false
         _isRecordingComplete.value = false
+        _isPreviewMode.value = false
+        _previewTemplate.value = null
+        _isCountingDown.value = false
         _countdownSeconds.value = 5
         _recordProgress.value = 0
         _recordTargetFrames.value = 0
         _recordingTemplateName.value = ""
+        _segmentStart.value = 0
+        _segmentEnd.value = 0
+        _computedScore.value = 0f
+        _totalRecordedFrames.value = 0
+        _previewKeypointSequence.value = null
+        fullRawKeypoints = null
         recordingTemplateId = null
     }
 

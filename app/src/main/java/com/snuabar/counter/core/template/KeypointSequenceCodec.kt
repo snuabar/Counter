@@ -54,4 +54,49 @@ object KeypointSequenceCodec {
         val bits = readInt(bytes, offset)
         return Float.fromBits(bits)
     }
+
+    /**
+     * Encode a keypoint sequence into ByteArray.
+     * Format: [4 bytes frame count][4 bytes keypoint count per frame][keypoint data...]
+     * Each keypoint: [x, y, confidence] as 3 floats (12 bytes)
+     */
+    fun encode(frames: List<Array<FloatArray>>): ByteArray {
+        if (frames.isEmpty()) return ByteArray(0)
+
+        val frameCount = frames.size
+        val keypointCount = frames.first().size
+        val valuesPerKeypoint = 3 // x, y, confidence
+
+        val totalBytes = 8 + frameCount * keypointCount * valuesPerKeypoint * 4
+        val bytes = ByteArray(totalBytes)
+
+        // Write header
+        writeInt(bytes, 0, frameCount)
+        writeInt(bytes, 4, keypointCount)
+
+        // Write data
+        var offset = 8
+        for (frame in frames) {
+            for (kp in frame) {
+                for (i in 0 until valuesPerKeypoint) {
+                    writeFloat(bytes, offset, if (i < kp.size) kp[i] else 0f)
+                    offset += 4
+                }
+            }
+        }
+
+        return bytes
+    }
+
+    private fun writeInt(bytes: ByteArray, offset: Int, value: Int) {
+        bytes[offset] = (value and 0xFF).toByte()
+        bytes[offset + 1] = ((value shr 8) and 0xFF).toByte()
+        bytes[offset + 2] = ((value shr 16) and 0xFF).toByte()
+        bytes[offset + 3] = ((value shr 24) and 0xFF).toByte()
+    }
+
+    private fun writeFloat(bytes: ByteArray, offset: Int, value: Float) {
+        val bits = value.toBits()
+        writeInt(bytes, offset, bits)
+    }
 }
